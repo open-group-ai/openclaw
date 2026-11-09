@@ -50,7 +50,7 @@ jobs:
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' || !inputs.windows_only) }}
     name: Build Linux companion
     # Match the release build base for native tests and manually built bundles.
-    runs-on: ubuntu-22.04
+    runs-on: [self-hosted, Linux, X64, grow-ci]
     # Leave room for cold source packaging and the native desktop proof afterward.
     timeout-minutes: 105
     permissions:

@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   dispatch-translate:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, grow-ci]
     env:
       GH_TOKEN: ${{ secrets.OPENCLAW_DOCS_SYNC_TOKEN }}
     steps:

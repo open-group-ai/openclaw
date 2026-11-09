@@ -16,7 +16,7 @@ jobs:
       github.event.workflow_run.event == 'schedule' &&
       (github.event.workflow_run.display_title == 'iOS Store release (weekly)' ||
       github.event.workflow_run.display_title == 'Android Store release (weekly)')
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, grow-ci]
     timeout-minutes: 5
     environment: ${{ github.event.workflow_run.display_title == 'iOS Store release (weekly)' && 'ios-store-release' || 'android-store-release' }}
     permissions:

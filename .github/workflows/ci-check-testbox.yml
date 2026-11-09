@@ -63,7 +63,7 @@ env:
 jobs:
   admission:
     if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, grow-ci]
     timeout-minutes: 3
     permissions:
       contents: read

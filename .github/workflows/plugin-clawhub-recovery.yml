@@ -29,7 +29,7 @@ jobs:
   recover:
     name: Recover exact sealed ClawHub attempts
     environment: clawhub-plugin-release
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, grow-ci]
     timeout-minutes: 60
     steps:
       - name: Checkout trusted recovery tooling

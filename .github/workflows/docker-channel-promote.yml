@@ -17,7 +17,7 @@ env:
 
 jobs:
   resolve:
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, grow-ci]
     permissions:
       contents: read
     outputs:
@@ -90,7 +90,7 @@ jobs:
     # Keep human approval outside the queued writer so waiting for approval
     # cannot block a tag-driven Docker release in docker-release-publish.
     # WARNING: KEEP CHANNEL PROMOTION GATED BY THE docker-release ENVIRONMENT.
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, grow-ci]
     environment: docker-release
     permissions: {}
     steps:
@@ -108,7 +108,7 @@ jobs:
 
   promote:
     needs: [resolve, approve]
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, grow-ci]
     concurrency:
       group: docker-release-publish
       cancel-in-progress: false

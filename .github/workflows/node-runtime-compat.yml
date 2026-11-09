@@ -12,7 +12,7 @@ permissions:
 jobs:
   compat:
     if: github.repository == 'openclaw/openclaw' || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, grow-ci]
     timeout-minutes: 60
     steps:
       - name: Checkout repository

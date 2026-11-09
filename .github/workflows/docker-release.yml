@@ -188,7 +188,7 @@ jobs:
     if: ${{ !cancelled() && needs.validate_release_identity.result == 'success' && (needs.prepare.result == 'success' || needs.prepare.result == 'skipped') }}
     # An approval wait must not hold the global registry writer lock.
     # Docker Hub credentials remain required workflow_call secrets for publish.
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, grow-ci]
     environment: docker-release
     permissions: {}
     steps:
@@ -207,7 +207,7 @@ jobs:
     name: Publish prepared Docker images
     needs: [validate_release_identity, prepare, approve]
     if: ${{ !cancelled() && needs.validate_release_identity.result == 'success' && (needs.prepare.result == 'success' || needs.prepare.result == 'skipped') && needs.approve.result == 'success' }}
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, grow-ci]
     timeout-minutes: 45
     # The global lock covers every registry mutation and the alias read/write
     # checks. Preparation never queues behind a previous release's promotion.

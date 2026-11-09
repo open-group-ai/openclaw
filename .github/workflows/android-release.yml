@@ -54,7 +54,7 @@ env:
 jobs:
   publish_signed_android_apk:
     name: Publish signed Android APK
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, grow-ci]
     timeout-minutes: 45
     environment: android-release
     env:

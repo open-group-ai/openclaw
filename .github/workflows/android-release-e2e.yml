@@ -17,7 +17,7 @@ env:
 
 jobs:
   qualify:
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, grow-ci]
     timeout-minutes: 90
     env:
       TARGET_SHA: ${{ inputs.target_sha || github.sha }}

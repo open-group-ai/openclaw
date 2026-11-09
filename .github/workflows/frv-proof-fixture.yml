@@ -21,7 +21,7 @@ permissions: {}
 jobs:
   fixture:
     name: Fail once, then pass
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, grow-ci]
     timeout-minutes: 5
     permissions: {}
     steps:

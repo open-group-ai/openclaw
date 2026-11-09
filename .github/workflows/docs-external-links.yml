@@ -15,7 +15,7 @@ concurrency:
 jobs:
   audit:
     if: github.repository == 'openclaw/openclaw'
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, grow-ci]
     timeout-minutes: 45
     steps:
       - name: Checkout

@@ -51,7 +51,7 @@ concurrency:
 jobs:
   scope:
     if: github.event_name == 'schedule' && github.repository == 'openclaw/openclaw'
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, grow-ci]
     outputs:
       changed: ${{ steps.scope.outputs.changed }}
     steps:

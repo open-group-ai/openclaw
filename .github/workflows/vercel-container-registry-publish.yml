@@ -71,7 +71,7 @@ jobs:
   approve_recovery:
     needs: validate_recovery
     if: ${{ !inputs.advisory }}
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, grow-ci]
     environment: docker-release
     permissions: {}
     steps:
@@ -83,7 +83,7 @@ jobs:
   publish:
     needs: [validate_recovery, approve_recovery]
     if: ${{ always() && (inputs.advisory || (needs.validate_recovery.result == 'success' && needs.approve_recovery.result == 'success')) }}
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, grow-ci]
     timeout-minutes: 30
     # Release mirroring is advisory; approved recovery must fail visibly.
     continue-on-error: ${{ inputs.advisory == true }}

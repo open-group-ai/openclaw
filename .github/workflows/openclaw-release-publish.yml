@@ -1173,7 +1173,7 @@ jobs:
       attestations: write
       contents: read
       id-token: write
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, grow-ci]
     timeout-minutes: 20
     steps:
       - name: Checkout trusted Android approval tooling
@@ -1305,7 +1305,7 @@ jobs:
       attestations: write
       contents: write
       id-token: write
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, grow-ci]
     timeout-minutes: 180
     environment: npm-release
     steps:
@@ -2318,7 +2318,7 @@ jobs:
     # Approval waits must not hold the Linux updater publication queue.
     needs: [publish, publish_docker]
     if: ${{ always() && !inputs.finalize_release_before_docker && inputs.prepared_plugins == '' && inputs.publish_openclaw_npm && needs.publish.result == 'success' && needs.publish_docker.result == 'success' }}
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, grow-ci]
     timeout-minutes: 10
     environment: npm-release
     permissions: {}
@@ -2434,7 +2434,7 @@ jobs:
     name: Approve GitHub release before Docker
     needs: [publish]
     if: ${{ inputs.finalize_release_before_docker && inputs.prepared_plugins == '' && inputs.publish_openclaw_npm && needs.publish.result == 'success' }}
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, grow-ci]
     timeout-minutes: 10
     environment: npm-release
     permissions: {}
@@ -2512,7 +2512,7 @@ jobs:
     if: ${{ !cancelled() && needs.finalize_github_release.result == 'success' && inputs.npm_dist_tag != 'extended-stable' && !contains(inputs.tag, '-beta.') }}
     continue-on-error: true
     # App-token minting stays on GitHub-hosted runners.
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, grow-ci]
     timeout-minutes: 10
     permissions:
       actions: write
