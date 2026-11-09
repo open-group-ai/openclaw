@@ -21,7 +21,7 @@ concurrency:
 jobs:
   prove:
     name: Prove targeted job rerun boundary
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, grow-ci]
     timeout-minutes: 20
     permissions:
       actions: write

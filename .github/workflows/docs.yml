@@ -24,7 +24,7 @@ jobs:
   docs:
     # Hourly CI owns scheduled docs validation, including its RunsOn route.
     if: github.event_name != 'push' || github.ref != 'refs/heads/main' || vars.OPENCLAW_CI_ON_PUSH == 'true'
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, grow-ci]
     timeout-minutes: 20
     steps:
       - name: Checkout

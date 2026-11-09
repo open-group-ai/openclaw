@@ -23,7 +23,7 @@ concurrency:
 jobs:
   validate_request:
     name: Validate release request
-    runs-on: ubuntu-22.04
+    runs-on: [self-hosted, Linux, X64, grow-ci]
     timeout-minutes: 5
     steps:
       - name: Validate tag input format

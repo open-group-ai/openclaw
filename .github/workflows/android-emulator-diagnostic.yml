@@ -23,7 +23,7 @@ permissions:
 
 jobs:
   validate-target:
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, grow-ci]
     timeout-minutes: 5
     permissions:
       contents: read
@@ -95,7 +95,7 @@ jobs:
 
   diagnose:
     needs: validate-target
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, grow-ci]
     timeout-minutes: ${{ inputs.operation == 'screenshots' && 40 || 25 }}
     permissions:
       contents: read

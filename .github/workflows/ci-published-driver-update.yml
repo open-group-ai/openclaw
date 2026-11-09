@@ -16,7 +16,7 @@ permissions:
 jobs:
   update:
     name: Published driver update
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, grow-ci]
     steps:
       - name: Start cell budget
         run: |

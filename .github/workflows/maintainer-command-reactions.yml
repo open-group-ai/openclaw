@@ -24,7 +24,7 @@ jobs:
           contains(github.event.comment.body, '/land')
         )
       ) }}
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, grow-ci]
     permissions:
       issues: write
       pull-requests: write

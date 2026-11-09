@@ -40,7 +40,7 @@ jobs:
       group: linux-app-release-publish
       queue: max
       cancel-in-progress: false
-    runs-on: ubuntu-22.04
+    runs-on: [self-hosted, Linux, X64, grow-ci]
     timeout-minutes: 10
     permissions:
       actions: read

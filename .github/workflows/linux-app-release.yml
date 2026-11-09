@@ -44,7 +44,7 @@ jobs:
       github.event.workflow_run.path == '.github/workflows/linux-app-release-request.yml' &&
       github.event.workflow_run.head_branch == 'main' &&
       github.event.workflow_run.conclusion == 'success'
-    runs-on: ubuntu-22.04
+    runs-on: [self-hosted, Linux, X64, grow-ci]
     timeout-minutes: 10
     permissions:
       contents: read
@@ -280,7 +280,7 @@ jobs:
     if: ${{ needs.validate_release.outputs.already_published != 'true' }}
     # Oldest supported build base: bundles link against this glibc, so newer
     # runners would silently drop Ubuntu 22.04/Debian 12 users.
-    runs-on: ubuntu-22.04
+    runs-on: [self-hosted, Linux, X64, grow-ci]
     timeout-minutes: 45
     permissions:
       contents: read
@@ -537,7 +537,7 @@ jobs:
     needs:
       - validate_release
       - build_linux
-    runs-on: ubuntu-22.04
+    runs-on: [self-hosted, Linux, X64, grow-ci]
     timeout-minutes: 10
     permissions: {}
     outputs:
@@ -855,7 +855,7 @@ jobs:
       - build_macos
       - build_windows
       - sign_windows
-    runs-on: ubuntu-22.04
+    runs-on: [self-hosted, Linux, X64, grow-ci]
     timeout-minutes: 10
     permissions: {}
     outputs:
@@ -966,7 +966,7 @@ jobs:
       group: linux-app-release-publish
       cancel-in-progress: false
       queue: max
-    runs-on: ubuntu-22.04
+    runs-on: [self-hosted, Linux, X64, grow-ci]
     timeout-minutes: 10
     permissions:
       actions: read

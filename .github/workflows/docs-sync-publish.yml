@@ -35,7 +35,7 @@ concurrency:
 
 jobs:
   sync-publish-repo:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, grow-ci]
     env:
       OPENCLAW_DOCS_SYNC_TOKEN: ${{ secrets.OPENCLAW_DOCS_SYNC_TOKEN }}
       OPENCLAW_DOCS_MDX_CACHE: ${{ github.workspace }}/.artifacts/docs-mdx-cache.json

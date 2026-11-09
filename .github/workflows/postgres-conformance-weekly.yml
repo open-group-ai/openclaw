@@ -23,7 +23,7 @@ jobs:
   postgres-conformance:
     if: ${{ github.repository == 'openclaw/openclaw' && github.ref == 'refs/heads/main' }}
     name: PostgreSQL conformance (${{ matrix.version }}, ${{ matrix.shard }})
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, grow-ci]
     # Allow 2× the measured 24m25s maximum in run 39393830074.
     timeout-minutes: 50
     strategy:

@@ -23,7 +23,7 @@ env:
 jobs:
   clear:
     name: Clear Mantis command reaction
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, grow-ci]
     permissions: {}
     steps:
       - name: Create Mantis cleanup GitHub App token

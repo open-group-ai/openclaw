@@ -342,7 +342,7 @@ jobs:
     name: Record detached Windows outcome
     needs: [validate_signed_windows_installers, promote_signed_windows_installers]
     if: ${{ always() }}
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, grow-ci]
     steps:
       - name: Record Windows promotion outcome
         if: ${{ always() }}

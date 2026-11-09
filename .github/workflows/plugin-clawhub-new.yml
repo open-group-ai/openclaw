@@ -668,7 +668,7 @@ jobs:
         pack_bootstrap_plugins,
       ]
     if: always() && github.event_name == 'workflow_dispatch' && needs.resolve_bootstrap_plan.outputs.has_bootstrap_candidates == 'true' && (inputs.pretag_validation == true || needs.validate_release_publish_approval.result == 'success') && needs.validate_bootstrap_trusted_publisher_cli.result == 'success' && needs.pack_bootstrap_plugins.result == 'success'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, grow-ci]
     timeout-minutes: 45
     environment: clawhub-plugin-bootstrap
     permissions:
@@ -820,7 +820,7 @@ jobs:
         validate_bootstrap_artifact,
       ]
     if: always() && github.event_name == 'workflow_dispatch' && inputs.pretag_validation != true && inputs.dry_run != true && needs.resolve_bootstrap_plan.outputs.has_bootstrap_candidates == 'true' && needs.validate_release_publish_approval.result == 'success' && needs.validate_bootstrap_trusted_publisher_cli.result == 'success' && needs.pack_bootstrap_plugins.result == 'success' && needs.validate_bootstrap_artifact.result == 'success'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, grow-ci]
     timeout-minutes: 120
     environment: clawhub-plugin-bootstrap
     permissions:

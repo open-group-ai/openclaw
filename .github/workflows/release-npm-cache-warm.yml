@@ -18,7 +18,7 @@ jobs:
     # New release-ci refs cannot read a sibling ref's cache. Scheduled main runs
     # publish portable npm downloads without executing package lifecycle hooks.
     if: ${{ github.repository == 'openclaw/openclaw' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, grow-ci]
     timeout-minutes: 20
     steps:
       - name: Setup Node.js
