@@ -1,6 +1,5 @@
 import path from "node:path";
 import { isCanonicalDottedDecimalIPv4, isLoopbackIpAddress } from "@openclaw/net-policy/ip";
-import { sanitizeForLog } from "../../packages/terminal-core/src/ansi.js";
 import {
   listAgentEntries,
   listAgentEntriesWithSource,
@@ -265,9 +264,9 @@ function collectModelPolicyAllowIssues(config: OpenClawConfig): ConfigValidation
       }
       issues.push({
         path: `${configPath}.${index}`,
+        // The entry value stays out of the message; the path already locates it.
         message:
-          `invalid model policy ref: ${sanitizeForLog(JSON.stringify(raw))}. ` +
-          'Use a configured alias, an exact "provider/model" ref, or a trailing prefix wildcard such as "provider/*", "provider/namespace/*" or "provider/family-*".',
+          'invalid model policy ref. Use a configured alias, an exact "provider/model" ref, or a trailing prefix wildcard such as "provider/*", "provider/namespace/*" or "provider/family-*".',
       });
     }
   };

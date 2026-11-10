@@ -1,11 +1,8 @@
 import path from "node:path";
-import { truncateUtf16Safe } from "@openclaw/normalization-core/utf16-slice";
 import JSON5 from "json5";
 import { VERSION } from "../version.js";
 import { formatConfigIssueLines } from "./issue-format.js";
-import { isSensitiveConfigPath } from "./sensitive-paths.js";
 import type { ConfigFileSnapshot } from "./types.js";
-import { isSecretRef } from "./types.secrets.js";
 import { shouldWarnOnTouchedVersion } from "./version.js";
 
 type ConfigIssuePathSegment = string | number;
@@ -199,69 +196,6 @@ function lineAtOffset(raw: string, offset: number): number {
   return line;
 }
 
-function resolveConfigValueAtPath(
-  root: unknown,
-  segments: readonly ConfigIssuePathSegment[],
-): unknown {
-  let current = root;
-  for (const segment of segments) {
-    if (typeof segment === "number") {
-      if (!Array.isArray(current) || segment >= current.length) {
-        return undefined;
-      }
-      current = current[segment];
-      continue;
-    }
-    if (!current || typeof current !== "object" || Array.isArray(current)) {
-      return undefined;
-    }
-    current = (current as Record<string, unknown>)[segment];
-  }
-  return current;
-}
-
-function stringifyReceivedValue(value: unknown): string | null {
-  if (value === undefined) {
-    return null;
-  }
-  if (typeof value === "number" && (!Number.isFinite(value) || Object.is(value, -0))) {
-    return Object.is(value, -0) ? "-0" : String(value);
-  }
-  try {
-    const serialized = JSON.stringify(value);
-    if (serialized === undefined) {
-      return null;
-    }
-    return serialized.length > 160 ? `${truncateUtf16Safe(serialized, 157)}...` : serialized;
-  } catch {
-    return null;
-  }
-}
-
-function appendReceivedValueHint(
-  message: string,
-  pathValue: string,
-  value: unknown,
-  pathSegments: readonly ConfigIssuePathSegment[],
-): string {
-  if (
-    value === undefined ||
-    isSecretRef(value) ||
-    isSensitiveConfigPath(pathValue) ||
-    pathSegments[0] === "channels" ||
-    (pathSegments[0] === "plugins" &&
-      pathSegments[1] === "entries" &&
-      pathSegments[3] === "config") ||
-    (typeof value === "object" && value !== null) ||
-    message.toLowerCase().includes("got:") ||
-    /\breceived\b/i.test(message)
-  ) {
-    return message;
-  }
-  const label = stringifyReceivedValue(value);
-  return label ? `${message}, got: ${label}` : message;
-}
-
 function resolveConfigIssueLineInRaw(
   raw: string,
   segments: readonly ConfigIssuePathSegment[],
@@ -273,7 +207,11 @@ function resolveConfigIssueLineInRaw(
   return offset === undefined ? undefined : lineAtOffset(raw, offset);
 }
 
-/** Render invalid config issues with source locations, received values, and version-skew advice. */
+/**
+ * Render invalid config issues with source locations and version-skew advice.
+ * Messages name the setting path and the reason; configured values are never
+ * echoed, so secrets cannot leak through validation output.
+ */
 export function renderConfigValidationIssueLines(
   snapshot: Pick<ConfigFileSnapshot, "issues" | "raw" | "parsed" | "sourceConfig" | "path">,
   marker = "-",
@@ -288,20 +226,11 @@ export function renderConfigValidationIssueLines(
     if (!segments || segments.length === 0) {
       return issue;
     }
-    const literalValue = resolveConfigValueAtPath(snapshot.parsed, segments);
-    const effectiveValue = resolveConfigValueAtPath(snapshot.sourceConfig, segments);
     const line = raw === null ? undefined : resolveConfigIssueLineInRaw(raw, segments);
-    // Validation follows includes, env substitution, and migrations. Only a
-    // matching root-file literal is both accurate and safe to echo here.
-    const canShowReceivedValue = line !== undefined && Object.is(literalValue, effectiveValue);
-    const message = canShowReceivedValue
-      ? appendReceivedValueHint(issue.message, issue.path, effectiveValue, segments)
-      : issue.message;
     return {
       ...issue,
       // Validation path metadata is non-enumerable; preserve it through this display copy.
       pathSegments: segments,
-      message,
       ...(line === undefined ? {} : { line, sourceFile }),
     };
   });
