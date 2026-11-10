@@ -34,6 +34,9 @@ const listSessionStateEventsSinceMock = vi.hoisted(() =>
     historyGap: false,
   })),
 );
+const listSessionPendingInputsMock = vi.hoisted(() =>
+  vi.fn(async () => ({ items: [], total: 0 })),
+);
 const emptyPluginMetadataSnapshot = {
   configFingerprint: "session-status-test-empty-plugin-metadata",
   ...createPluginMetadataSnapshotFixture(),
@@ -219,6 +222,10 @@ vi.mock("../auto-reply/reply/queue.js", () => ({
   getFollowupQueueDepth: () => 0,
   resolveQueueSettings: () => ({ mode: "interrupt" }),
 }));
+// mock-isolation: Interrupted-input counts use a fixed retained-input page.
+vi.mock("../config/sessions/session-pending-input-history.js", () => ({
+  listSessionPendingInputs: (...args: unknown[]) => listSessionPendingInputsMock(...args),
+}));
 vi.mock("../sessions/session-state-events.js", () => ({
   getSessionStateVersion: (sessionKey: string, agentId: string) =>
     getSessionStateVersionMock(sessionKey, agentId),
@@ -259,6 +266,8 @@ function resetSessionStore(inputStore: Record<string, SessionEntry>) {
     earliestAvailableSequence: 0,
     historyGap: false,
   });
+  listSessionPendingInputsMock.mockReset();
+  listSessionPendingInputsMock.mockResolvedValue({ items: [], total: 0 });
   loadSessionStoreMock.mockReturnValue(store);
   callGatewayMock.mockImplementation(async (opts: unknown) => {
     const request = opts as { method?: string; params?: Record<string, unknown> };
@@ -1011,4 +1020,67 @@ describe("session_status tool", () => {
       modelOverrideSource: "user",
     });
   });
+
+  it("reports no interrupted inputs when the retained page is empty", async () => {
+    resetSessionStore({ main: fixtureSession("s1") });
+    listSessionPendingInputsMock.mockResolvedValue({ items: [], total: 0 });
+
+    const result = await status({});
+    const text = (result.content?.[0] as { text?: string } | undefined)?.text ?? "";
+    expect(text).toContain("Interrupted inputs: none");
+    expect(listSessionPendingInputsMock).toHaveBeenCalledWith(expect.anything(), { limit: 10 });
+  });
+
+  it("reports the interrupted count from the latest retained-input page", async () => {
+    resetSessionStore({ main: fixtureSession("s1") });
+    listSessionPendingInputsMock.mockResolvedValue({
+      total: 3,
+      items: [
+        { id: "a", state: "interrupted" },
+        { id: "b", state: "interrupted" },
+        { id: "c", state: "queued" },
+      ],
+    });
+
+    const result = await status({});
+    const text = (result.content?.[0] as { text?: string } | undefined)?.text ?? "";
+    expect(text).toContain("Interrupted inputs: 2");
+    expect(text).not.toContain("Interrupted inputs: none");
+    expect(text).not.toContain("Interrupted inputs: unknown");
+  });
+
+  it("reports unknown interrupted inputs when the retained store fails", async () => {
+    resetSessionStore({ main: fixtureSession("s1") });
+    listSessionPendingInputsMock.mockRejectedValue(new Error("store unavailable"));
+
+    const result = await status({});
+    const text = (result.content?.[0] as { text?: string } | undefined)?.text ?? "";
+    expect(result.details).toMatchObject({ ok: true });
+    expect(text).toContain("Interrupted inputs: unknown");
+    expect(Value.Check(toolOutputSchema(result), result.details)).toBe(true);
+  });
+
+  it("keeps existing session_status fields when reporting interrupted inputs", async () => {
+    resetSessionStore({ main: fixtureSession("s1") });
+    listSessionPendingInputsMock.mockResolvedValue({ items: [], total: 0 });
+
+    const result = await status({});
+    expect(result.details).toMatchObject({
+      ok: true,
+      sessionKey: "main",
+      changedModel: false,
+      stateVersion: 0,
+      statusText: expect.stringContaining("Interrupted inputs: none"),
+    });
+    expect(Value.Check(toolOutputSchema(result), result.details)).toBe(true);
+    const text = (result.content?.[0] as { text?: string } | undefined)?.text ?? "";
+    expect(text).toContain("OpenClaw");
+    expect(text).toContain("Interrupted inputs: none");
+  });
 });
+
+function toolOutputSchema(result: { details: unknown }) {
+  const tool = getSessionStatusTool();
+  void result;
+  return tool.outputSchema!;
+}
