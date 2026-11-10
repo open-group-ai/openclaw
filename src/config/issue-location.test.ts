@@ -32,7 +32,11 @@ function renderIssue(
   );
 }
 
-function receivedHint(value: unknown, pathValue = "some.path", message = "invalid input"): string {
+function renderedMessage(
+  value: unknown,
+  pathValue = "some.path",
+  message = "invalid input",
+): string {
   const pathSegments = pathValue.split(".");
   let root: unknown = value;
   for (const segment of pathSegments.toReversed()) {
@@ -57,19 +61,14 @@ it.each<[string, PathSegment[], number | undefined]>([
   expect(match?.[1] ? Number(match[1]) : undefined).toBe(expected);
 });
 
-it.each<[string, unknown, string, string, string?]>([
-  [
-    "UTF-16 truncation",
-    `${"x".repeat(155)}🎉tail`,
-    "gateway.bind",
-    `invalid input, got: "${"x".repeat(155)}...`,
-  ],
-  ["sensitive paths", "abc123", "channels.telegram.botToken", "invalid token", "invalid token"],
-  ["object values", { nested: true }, "some.path", "invalid input"],
-  ["NaN", Number.NaN, "some.path", "invalid input, got: NaN"],
-  ["negative zero", -0, "some.path", "invalid input, got: -0"],
-])("handles %s", (_name, value, path, expected, message = "invalid input") => {
-  expect(receivedHint(value, path, message)).toBe(expected);
+it.each<[string, unknown, string, string?]>([
+  ["long strings", `${"x".repeat(155)}🎉tail`, "gateway.bind"],
+  ["sensitive paths", "abc123", "channels.telegram.botToken", "invalid token"],
+  ["object values", { nested: true }, "some.path"],
+  ["NaN", Number.NaN, "some.path"],
+  ["negative zero", -0, "some.path"],
+])("never echoes values for %s", (_name, value, path, message = "invalid input") => {
+  expect(renderedMessage(value, path, message)).toBe(message);
 });
 
 it.each([
@@ -80,9 +79,7 @@ it.each([
   ],
 ] as const)("locates the value after skipping %s with mixed nesting", (_name, ignored) => {
   const raw = `{\n${ignored}\n target: "bad",\n}`;
-  expect(renderIssue(["target"], { raw })).toBe(
-    'openclaw.json:6 — target: Invalid input, got: "bad"',
-  );
+  expect(renderIssue(["target"], { raw })).toBe("openclaw.json:6 — target: Invalid input");
 });
 
 it.each([
