@@ -228,6 +228,18 @@ describe("prepared status", () => {
     },
   );
 
+  it("shows the interrupted-inputs count from the latest retained-input page", async () => {
+    await expectText(
+      render({ interruptedInputsCount: 3, sessionEntry: entry() }),
+      ["Interrupted inputs: 3"],
+      ["Interrupted inputs: none"],
+    );
+  });
+
+  it("shows none when the retained-input page holds no interrupted inputs", async () => {
+    await expectText(render({ sessionEntry: entry() }), ["Interrupted inputs: none"]);
+  });
+
   it("shows the selected global agent's children instead of the default agent's", async () => {
     const cfg: Params["cfg"] = {
       agents: { defaults: { systemAgent: { agentId: "ops" } }, entries: { research: {}, ops: {} } },

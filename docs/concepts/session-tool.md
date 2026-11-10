@@ -505,6 +505,8 @@ the guidance was already admitted.
 
 `session_status` is the lightweight `/status`-equivalent tool for the current or another visible session. It reports usage, time, model/runtime state, and linked background-task context when present. Like `/status`, it can backfill sparse token/cache counters from the latest transcript usage entry, and `model=default` clears a per-session override. Use `sessionKey="current"` for the caller's current session; visible client labels such as `openclaw-tui` are not session keys.
 
+Both surfaces include a compact `Interrupted inputs: <n|none>` line reporting how many retained inputs in the latest retained-input page were interrupted (`none` when there are none). It shows counts only, never input text.
+
 Pass `capabilities: true` to add the session's tool inventory: the tools it exposes and, for each tool it does not expose, the reason (for example `Denied by tools.deny` or the active tool profile). The inventory comes from the same Gateway check as `/tools` and the Control UI tools panel. It describes that session only; other sessions, agents, or configuration can expose more. If the inventory cannot be read, status still returns and says the check failed. The agent's system prompt points here before the agent says OpenClaw cannot do something.
 
 Model changes stay scoped to the selected session and do not update the agent's or global default. Gateway-managed sessions apply the same model, runtime, and execution-environment checks as other session model selections. Repeating an unchanged choice does not update session activity or emit model-change notifications.

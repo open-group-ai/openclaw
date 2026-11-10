@@ -34,6 +34,7 @@ import { resolveFreshSessionTotalTokens } from "../config/sessions.js";
 import { formatSqliteSessionFileMarker } from "../config/sessions/legacy-sqlite-marker.js";
 import { resolveSessionLifecycleTimestampsAsync } from "../config/sessions/lifecycle-read.js";
 import { hasSessionAutoModelFallbackProvenance } from "../config/sessions/model-override-provenance.js";
+import { listSessionPendingInputs } from "../config/sessions/session-pending-input-history.js";
 import { preparePhysicalSessionStorePath } from "../config/sessions/session-store-path.js";
 import { resolveProjectedAgentRunProgressState } from "../infra/agent-run-registry.js";
 import { formatDurationCompact } from "../infra/format-time/format-duration.ts";
@@ -109,6 +110,34 @@ async function resolveRuntimePluginHealthLine(): Promise<string | undefined> {
 
 export async function buildStatusText(params: BuildStatusTextParams): Promise<string> {
   return (await buildStatusReplyParts(params)).text;
+}
+
+// Same latest retained-input page the runtime "Interrupted inputs" section reads.
+// Counts only, never message text. A failed read is not evidence of an empty page,
+// so the shared renderer maps unknown to "none".
+async function resolveInterruptedInputsCount(params: {
+  agentId: string;
+  sessionId?: string;
+  sessionKey: string;
+  storePath?: string;
+}): Promise<number | undefined> {
+  if (!params.sessionId) {
+    return undefined;
+  }
+  try {
+    const page = await listSessionPendingInputs(
+      {
+        agentId: params.agentId,
+        sessionId: params.sessionId,
+        sessionKey: params.sessionKey,
+        ...(params.storePath ? { storePath: params.storePath } : {}),
+      },
+      { limit: 10 },
+    );
+    return page.items.filter((item) => item.state === "interrupted").length;
+  } catch {
+    return undefined;
+  }
 }
 
 // Status body plus its structured presentation mirror, for chat replies whose
@@ -624,6 +653,14 @@ export async function buildStatusReplyParts(
     agentId: statusAgentId,
     preparedSessionEntry: sessionEntry,
   });
+  const interruptedInputsCount =
+    params.interruptedInputsCount ??
+    (await resolveInterruptedInputsCount({
+      agentId: statusAgentId,
+      sessionId: sessionEntry?.sessionId,
+      sessionKey,
+      ...(storePath ? { storePath } : {}),
+    }));
   return buildStatusMessageParts({
     config: cfg,
     preparedSandboxRuntime,
@@ -680,5 +717,6 @@ export async function buildStatusReplyParts(
     channelFeatureLine,
     mediaDecisions: params.mediaDecisions,
     transcriptUsage,
+    interruptedInputsCount,
   });
 }

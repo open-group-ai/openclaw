@@ -126,6 +126,8 @@ type StatusArgs = {
   usageLine?: string;
   uptimeValue?: string;
   queue?: QueueStatus;
+  /** Interrupted retained inputs in the latest retained-input page; none when absent or zero. */
+  interruptedInputsCount?: number;
   mediaDecisions?: ReadonlyArray<MediaUnderstandingDecision>;
   subagentsLine?: string;
   pluginHealthLine?: string;
@@ -862,6 +864,14 @@ export function buildStatusMessageParts(args: StatusArgs) {
   const costLine = costLabel ? `💵 Cost: ${costLabel}` : null;
   // Show queue details only for a nonempty queue or explicit overrides.
   const queueHasSignal = (args.queue?.depth ?? 0) > 0 || args.queue?.showDetails === true;
+  // Counts only, never input text. Unknown or zero renders as none so the line
+  // stays stable and machine-parseable on every status card.
+  const interruptedInputsValue =
+    typeof args.interruptedInputsCount === "number" &&
+    Number.isFinite(args.interruptedInputsCount) &&
+    Math.floor(args.interruptedInputsCount) > 0
+      ? String(Math.floor(args.interruptedInputsCount))
+      : "none";
   const compactionValue = formatCompactionStatus(entry);
   const contextPct =
     totalTokens !== undefined && totalTokens > 0 && contextTokens != null && contextTokens > 0
@@ -903,6 +913,7 @@ export function buildStatusMessageParts(args: StatusArgs) {
       modesValue ? `🎛️ Modes: ${modesValue}` : null,
       groupActivationValue ? `👥 Activation: ${groupActivationValue}` : null,
       `🪢 Queue: ${queueMode}${queueHasSignal ? queueDetails : ""}`,
+      `Interrupted inputs: ${interruptedInputsValue}`,
     ],
     [
       args.channelFeatureLine,
@@ -938,6 +949,7 @@ export function buildStatusMessageParts(args: StatusArgs) {
   pushStatusRow("🎛️ Modes", modesValue);
   pushStatusRow("👥 Activation", groupActivationValue);
   pushStatusRow("🪢 Queue", queueHasSignal ? `${queueMode}${queueDetails}` : queueMode);
+  pushStatusRow("Interrupted inputs", interruptedInputsValue);
 
   const contextBlock = (value: string | null | undefined): MessagePresentationBlock[] =>
     value?.trim() ? [{ type: "context", text: value }] : [];

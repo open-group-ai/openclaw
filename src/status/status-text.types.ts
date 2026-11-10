@@ -45,6 +45,11 @@ export type BuildStatusTextParams = {
   isGroup: boolean;
   defaultGroupActivation: () => "always" | "mention";
   mediaDecisions?: MediaUnderstandingDecision[];
+  /**
+   * Explicit interrupted-input count. When omitted, status resolves it from the
+   * latest retained-input page; unknown or zero renders as "none".
+   */
+  interruptedInputsCount?: number;
   pluginHealthLineOverride?: string;
   primaryModelLabelOverride?: string;
   modelAuthOverride?: string;

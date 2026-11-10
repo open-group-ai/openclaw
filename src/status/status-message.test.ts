@@ -479,3 +479,38 @@ describe("buildStatusMessage context window", () => {
     expect(text).not.toContain("pinned session");
   });
 });
+
+describe("Interrupted inputs line", () => {
+  const minimal = {
+    modelRefs: statusModelRefs({ provider: "anthropic", model: "claude-haiku-4-5" }),
+    agent: { model: "anthropic/claude-haiku-4-5" },
+  };
+
+  it.each([
+    [undefined, "none"],
+    [0, "none"],
+    [1, "1"],
+    [3, "3"],
+  ] as const)("renders count %s as %s", (count, expected) => {
+    const parts = buildStatusMessageParts({
+      ...minimal,
+      ...(count === undefined ? {} : { interruptedInputsCount: count }),
+    });
+    expect(parts.text).toContain(`Interrupted inputs: ${expected}`);
+    expect(statusRows(parts).get("Interrupted inputs")).toBe(expected);
+  });
+
+  it("keeps the line machine-parseable with counts only", () => {
+    const parts = buildStatusMessageParts({ ...minimal, interruptedInputsCount: 2 });
+    const line = parts.text.split("\n").find((entry) => entry.startsWith("Interrupted inputs:"));
+    expect(line).toMatch(/^Interrupted inputs: (none|\d+)$/);
+  });
+
+  it("leaves the rest of the output unchanged", () => {
+    const strip = (text: string) =>
+      text.split("\n").filter((line) => !line.startsWith("Interrupted inputs:"));
+    expect(strip(buildStatusMessage({ ...minimal, interruptedInputsCount: 5 }))).toEqual(
+      strip(buildStatusMessage(minimal)),
+    );
+  });
+});
