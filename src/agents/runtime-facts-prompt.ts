@@ -12,6 +12,18 @@ import {
 } from "./runtime-execution-facts.js";
 import { buildActiveSubagentRuntimeContext } from "./subagents/registry/subagent-active-context.js";
 
+/** Canonical empty state for the Interrupted inputs section.
+ * Deterministic with no timestamps or ordering variance. This section travels
+ * in the transient per-turn runtime context, never in the stable system prompt
+ * prefix, so an empty state never invalidates prompt caching. The newest
+ * snapshot per family wins; an explicit "none" means no active work. */
+export const INTERRUPTED_INPUTS_EMPTY_SECTION_TEXT = "## Interrupted inputs\nnone";
+
+/** Return the canonical empty Interrupted inputs section text. */
+export function buildInterruptedInputsEmptySection(): string {
+  return INTERRUPTED_INPUTS_EMPTY_SECTION_TEXT;
+}
+
 export async function buildRuntimeFactsContext(
   params: ExecutionHostRuntimeFactsParams & {
     cfg: OpenClawConfig;
@@ -56,7 +68,9 @@ export async function buildRuntimeFactsContext(
         });
       facts.push({
         kind: "conversation-data",
-        text: ["## Interrupted inputs", ...(lines.length ? lines : ["none in the latest retained-input page"])].join("\n"),
+        text: lines.length
+          ? ["## Interrupted inputs", ...lines].join("\n")
+          : buildInterruptedInputsEmptySection(),
       });
     } catch {
       // A failed history read is not evidence that the retained-input page is empty.

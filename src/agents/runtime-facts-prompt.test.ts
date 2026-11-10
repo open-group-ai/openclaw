@@ -4,7 +4,12 @@ import * as execApprovals from "../infra/exec-approvals.js";
 import { withMockedPlatform } from "../test-utils/vitest-spies.js";
 import type { MediaGenerationOperation } from "./media-generation-activity.js";
 import * as mediaActivity from "./media-generation-activity.js";
-import { buildRuntimeFactsContext } from "./runtime-facts-prompt.js";
+import { supersedeRuntimeContextSnapshots } from "./internal-runtime-context.js";
+import {
+  buildInterruptedInputsEmptySection,
+  buildRuntimeFactsContext,
+  INTERRUPTED_INPUTS_EMPTY_SECTION_TEXT,
+} from "./runtime-facts-prompt.js";
 
 const params = { capabilityToolNames: new Set(["exec"]), agentId: "main", cfg: {} };
 const fact = (text: string) => ({ kind: "conversation-data", text });
@@ -211,7 +216,7 @@ it("renders the latest retained-input page in a stable, bounded summary", async 
   };
   read.mockResolvedValue({ items: [], total: 0 });
   expect(await buildRuntimeFactsContext(input)).toContainEqual(
-    fact("## Interrupted inputs\nnone in the latest retained-input page"),
+    fact("## Interrupted inputs\nnone"),
   );
   read.mockResolvedValue({
     total: 2,
@@ -224,4 +229,48 @@ it("renders the latest retained-input page in a stable, bounded summary", async 
     fact('## Interrupted inputs\n- interrupted: "first"\n- interrupted: "second"'),
   );
   expect(read).toHaveBeenLastCalledWith(expect.anything(), { limit: 10 });
+});
+
+it("renders the canonical interrupted-inputs empty state exactly", async () => {
+  expect(buildInterruptedInputsEmptySection()).toBe("## Interrupted inputs\nnone");
+  expect(INTERRUPTED_INPUTS_EMPTY_SECTION_TEXT).toBe("## Interrupted inputs\nnone");
+  const read = vi.spyOn(pendingInputs, "listSessionPendingInputs");
+  const input = {
+    ...params,
+    executionHost: false,
+    sessionTarget: { sessionId: "session", sessionKey: "agent:main:session" },
+  };
+  read.mockResolvedValue({ items: [], total: 0 });
+  const facts = await buildRuntimeFactsContext(input);
+  expect(facts).toContainEqual(fact(buildInterruptedInputsEmptySection()));
+  expect(facts).toContainEqual(fact(INTERRUPTED_INPUTS_EMPTY_SECTION_TEXT));
+});
+
+it("renders the interrupted-inputs empty state byte-identically across runs", async () => {
+  const read = vi.spyOn(pendingInputs, "listSessionPendingInputs");
+  const input = {
+    ...params,
+    executionHost: false,
+    sessionTarget: { sessionId: "session", sessionKey: "agent:main:session" },
+  };
+  read.mockResolvedValue({ items: [], total: 0 });
+  const first = await buildRuntimeFactsContext(input);
+  const second = await buildRuntimeFactsContext(input);
+  const firstText = first.find((fragment) => fragment.text.startsWith("## Interrupted inputs"))?.text;
+  const secondText = second.find((fragment) => fragment.text.startsWith("## Interrupted inputs"))?.text;
+  expect(firstText).toBe(buildInterruptedInputsEmptySection());
+  expect(secondText).toBe(buildInterruptedInputsEmptySection());
+  expect(Buffer.from(firstText ?? "", "utf8").equals(Buffer.from(secondText ?? "", "utf8"))).toBe(true);
+  expect(firstText).not.toMatch(/\d{4}-\d{2}-\d{2}|\d{2}:\d{2}|Date\.now|Math\.random/);
+});
+
+it("supersedes older interrupted snapshots with the canonical empty state", async () => {
+  const factFor = (snapshotFamily: string, text: string) =>
+    ({ kind: "conversation-data" as const, snapshotFamily, text });
+  const old = factFor("## Interrupted inputs", '## Interrupted inputs\n- interrupted: "old"');
+  const empty = factFor("## Interrupted inputs", buildInterruptedInputsEmptySection());
+  expect(supersedeRuntimeContextSnapshots([old, empty])).toEqual([empty]);
+  expect(empty.text).toBe("## Interrupted inputs\nnone");
+  const activeLines = empty.text.split("\n").slice(1).filter((line) => line.startsWith("- "));
+  expect(activeLines).toEqual([]);
 });
