@@ -38,6 +38,7 @@ it("reserves raw cron scratch output", () => {
   expect(isCronMachineOutput(argv("cron", "scratch", "job"))).toBe(true);
   expect(isCronMachineOutput(argv("cron", "scratch", "job", "--set", "note"))).toBe(true);
   expect(isCronMachineOutput(argv("cron", "scratch", "job", "--unset"))).toBe(true);
+  expect(isCronMachineOutput(argv("cron", "scratch", "job", "--clear"))).toBe(true);
 });
 
 it("treats config set --json as parse-only except for JSON dry-run reports", () => {

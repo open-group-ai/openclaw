@@ -21,6 +21,7 @@ export function registerCronScratchCommand(cron: Command) {
       .option("--set <text>", "Replace scratch with exact text")
       .option("--file <path>", "Replace scratch from a file, or - for stdin")
       .option("--unset", "Remove the scratch row", false)
+      .option("--clear", "Empty the scratch content")
       .option("--expected-revision <n>", "Require the current scratch revision")
       .action(async (idArg, opts) => {
         try {
@@ -29,12 +30,15 @@ export function registerCronScratchCommand(cron: Command) {
             opts.set !== undefined,
             opts.file !== undefined,
             opts.unset === true,
+            opts.clear === true,
           ].filter(Boolean).length;
           if (opts.get && mutations > 0) {
-            throw new CronCliError("--get cannot be combined with --set, --file, or --unset");
+            throw new CronCliError(
+              "--get cannot be combined with --set, --file, --unset, or --clear",
+            );
           }
           if (mutations > 1) {
-            throw new CronCliError("choose only one of --set, --file, or --unset");
+            throw new CronCliError("choose only one of --set, --file, --unset, or --clear");
           }
           // Inline writes with a valid explicit revision already have their CAS input.
           // Keep the initial read before file/stdin consumption and input errors.
@@ -43,6 +47,7 @@ export function registerCronScratchCommand(cron: Command) {
             opts.expectedRevision !== undefined &&
             opts.file === undefined &&
             (opts.unset ||
+              opts.clear ||
               Buffer.byteLength(String(opts.set ?? ""), "utf8") <= CRON_JOB_SCRATCH_MAX_BYTES)
               ? parseStrictNonNegativeInteger(opts.expectedRevision)
               : undefined;
@@ -67,9 +72,11 @@ export function registerCronScratchCommand(cron: Command) {
 
           const content = opts.unset
             ? null
-            : opts.file !== undefined
-              ? await readCronScratchContent(String(opts.file))
-              : String(opts.set ?? "");
+            : opts.clear
+              ? ""
+              : opts.file !== undefined
+                ? await readCronScratchContent(String(opts.file))
+                : String(opts.set ?? "");
           const result = (await callGatewayFromCli("cron.scratch.set", opts, {
             id,
             content,
