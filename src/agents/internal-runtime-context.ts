@@ -44,17 +44,29 @@ export type RuntimeContextFragment = {
   snapshotFamily?: string;
 };
 
+/** Snapshot families share their `## ` heading as the first text line. */
+function snapshotHeadingFamily(fragment: RuntimeContextFragment): string | undefined {
+  if (fragment.kind !== "conversation-data") {
+    return undefined;
+  }
+  const [firstLine] = fragment.text.split("\n", 1);
+  return firstLine?.startsWith("## ") ? firstLine : undefined;
+}
+
 /** Keep the newest snapshot of each family, including explicit empty snapshots. */
 export function supersedeRuntimeContextSnapshots(fragments: RuntimeContextFragment[]): RuntimeContextFragment[] {
   const seen = new Set<string>();
   return fragments.toReversed().filter((fragment) => {
-    if (!fragment.snapshotFamily) {
+    // Retained fragments predate explicit family tags; key them by their
+    // snapshot heading so a fresh snapshot supersedes the same family.
+    const family = fragment.snapshotFamily ?? snapshotHeadingFamily(fragment);
+    if (!family) {
       return true;
     }
-    if (seen.has(fragment.snapshotFamily)) {
+    if (seen.has(family)) {
       return false;
     }
-    seen.add(fragment.snapshotFamily);
+    seen.add(family);
     return true;
   }).toReversed();
 }

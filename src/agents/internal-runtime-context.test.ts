@@ -10,6 +10,7 @@ import {
   resolvePendingRuntimeContextReplay,
   stripHistoricalRuntimeContextCustomMessages,
   stripInternalRuntimeContext,
+  supersedeRuntimeContextSnapshots,
   SYSTEM_UPDATE_MESSAGE_CUSTOM_TYPE,
 } from "./internal-runtime-context.js";
 
@@ -231,7 +232,6 @@ describe("additive fallback context lifetime", () => {
 
 
 it("replaces snapshots by family, including an explicit empty snapshot", async () => {
-  const { supersedeRuntimeContextSnapshots } = await import("./internal-runtime-context.js");
   const snapshot = (snapshotFamily: string, text: string) =>
     ({ kind: "conversation-data" as const, snapshotFamily, text });
   const old = snapshot("interrupted", "## Interrupted inputs\n- old");
@@ -242,4 +242,64 @@ it("replaces snapshots by family, including an explicit empty snapshot", async (
   expect(supersedeRuntimeContextSnapshots([old, date, ordinary, empty, newerDate])).toEqual([
     ordinary, empty, newerDate,
   ]);
+});
+
+describe("supersedeRuntimeContextSnapshots with retained snapshots", () => {
+  const retained = (text: string) => ({ kind: "conversation-data" as const, text });
+  const fresh = (text: string) => ({
+    kind: "conversation-data" as const,
+    snapshotFamily: text.split("\n", 1)[0],
+    text,
+  });
+  const INTERRUPTED_ITEMS = '## Interrupted inputs\n- interrupted: "stale"';
+  const INTERRUPTED_NONE = "## Interrupted inputs\nnone in the latest retained-input page";
+  const TEMPORAL_OLD = "## Temporal Context\nCurrent date: 1999-01-01\nTime zone: UTC";
+  const TEMPORAL_NEW = "## Temporal Context\nCurrent date: 2026-10-09\nTime zone: UTC";
+
+  it("lets a later explicit none clear an earlier retained interrupted-inputs snapshot", () => {
+    expect(
+      supersedeRuntimeContextSnapshots([retained(INTERRUPTED_ITEMS), fresh(INTERRUPTED_NONE)]),
+    ).toEqual([fresh(INTERRUPTED_NONE)]);
+  });
+
+  it("clears retained snapshots even when neither carries an explicit family", () => {
+    expect(
+      supersedeRuntimeContextSnapshots([retained(INTERRUPTED_ITEMS), retained(INTERRUPTED_NONE)]),
+    ).toEqual([retained(INTERRUPTED_NONE)]);
+  });
+
+  it("lets a later non-empty snapshot supersede an earlier explicit none", () => {
+    expect(
+      supersedeRuntimeContextSnapshots([retained(INTERRUPTED_NONE), fresh(INTERRUPTED_ITEMS)]),
+    ).toEqual([fresh(INTERRUPTED_ITEMS)]);
+  });
+
+  it("keeps only the newest temporal snapshot", () => {
+    expect(supersedeRuntimeContextSnapshots([retained(TEMPORAL_OLD), fresh(TEMPORAL_NEW)])).toEqual(
+      [fresh(TEMPORAL_NEW)],
+    );
+    expect(
+      supersedeRuntimeContextSnapshots([retained(TEMPORAL_OLD), retained(TEMPORAL_NEW)]),
+    ).toEqual([retained(TEMPORAL_NEW)]);
+  });
+
+  it("keeps snapshots of different families independent", () => {
+    expect(
+      supersedeRuntimeContextSnapshots([retained(INTERRUPTED_ITEMS), fresh(TEMPORAL_NEW)]),
+    ).toEqual([retained(INTERRUPTED_ITEMS), fresh(TEMPORAL_NEW)]);
+    expect(
+      supersedeRuntimeContextSnapshots([retained(TEMPORAL_OLD), fresh(INTERRUPTED_NONE)]),
+    ).toEqual([retained(TEMPORAL_OLD), fresh(INTERRUPTED_NONE)]);
+  });
+
+  it("passes a single snapshot through unchanged", () => {
+    const single = [retained(INTERRUPTED_NONE)];
+    expect(supersedeRuntimeContextSnapshots(single)).toEqual(single);
+  });
+
+  it("retains untagged fragments that are not snapshots", () => {
+    const first = retained("Conversation info: channel=telegram");
+    const second = retained("Conversation info: channel=telegram");
+    expect(supersedeRuntimeContextSnapshots([first, second])).toEqual([first, second]);
+  });
 });

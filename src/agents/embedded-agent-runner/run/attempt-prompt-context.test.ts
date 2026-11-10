@@ -4,6 +4,7 @@ import {
   clearRuntimeConfigSnapshot,
   setRuntimeConfigSnapshot,
 } from "../../../config/runtime-snapshot.js";
+import * as pendingInputs from "../../../config/sessions/session-pending-input-history.js";
 import type { SessionSystemPromptReport } from "../../../config/sessions/types.js";
 import { createUserTurnTranscriptRecorder } from "../../../sessions/user-turn-transcript.js";
 import { addSession, appendOutput, deleteSession } from "../../bash-process-registry.js";
@@ -263,6 +264,7 @@ describe("prepareEmbeddedAttemptPromptContext", () => {
     expect(content).not.toMatch(/private output tail|runtimeMs|startedAt/);
     expect(active.runtimeContextMessageForCurrentTurn?.details.fragments).toContainEqual({
       kind: "conversation-data",
+      snapshotFamily: "Active exec sessions at turn start (snapshot):",
       text: expect.stringContaining("Active exec sessions at turn start (snapshot):"),
     });
     expect(active.promptForSession).toBe("Visible request");
@@ -317,6 +319,78 @@ describe("prepareEmbeddedAttemptPromptContext", () => {
       "- tool=image_generate; none",
     );
     expect(empty.runtimeContextMessageForCurrentTurn?.content).not.toContain("image-1");
+  });
+
+  it("lets the latest interrupted-inputs snapshot supersede retained ones, including an explicit none", async () => {
+    vi.spyOn(pendingInputs, "listSessionPendingInputs").mockResolvedValue({ items: [], total: 0 });
+    const fixture = createInput({
+      attempt: createAttempt({
+        sessionTarget: { sessionId: "session-1", sessionKey: "agent:main:session-1" },
+        runtimeContextFragments: [
+          { kind: "conversation-data", text: '## Interrupted inputs\n- interrupted: "stale"' },
+          {
+            kind: "conversation-data",
+            text: "## Temporal Context\nCurrent date: 1999-01-01\nTime zone: UTC",
+          },
+        ],
+      }),
+    });
+
+    const result = await prepareContext(fixture.input);
+    const content = result.runtimeContextMessageForCurrentTurn?.content ?? "";
+    expect(content.match(/## Interrupted inputs/g)).toHaveLength(1);
+    expect(content).toContain("## Interrupted inputs\nnone in the latest retained-input page");
+    expect(content).not.toContain("stale");
+    expect(content.match(/## Temporal Context/g)).toHaveLength(1);
+    expect(content).toContain("Current date: 2026-10-09");
+    expect(content).not.toContain("1999-01-01");
+  });
+
+  it("lets a later non-empty interrupted-inputs page supersede a retained none", async () => {
+    vi.spyOn(pendingInputs, "listSessionPendingInputs").mockResolvedValue({
+      total: 1,
+      items: [
+        {
+          id: "a",
+          runId: "a",
+          acceptedAt: 1,
+          state: "interrupted",
+          message: { role: "user", content: "fresh", timestamp: 1 },
+        },
+      ],
+    });
+    const fixture = createInput({
+      attempt: createAttempt({
+        sessionTarget: { sessionId: "session-1", sessionKey: "agent:main:session-1" },
+        runtimeContextFragments: [
+          {
+            kind: "conversation-data",
+            text: "## Interrupted inputs\nnone in the latest retained-input page",
+          },
+        ],
+      }),
+    });
+
+    const result = await prepareContext(fixture.input);
+    const content = result.runtimeContextMessageForCurrentTurn?.content ?? "";
+    expect(content.match(/## Interrupted inputs/g)).toHaveLength(1);
+    expect(content).toContain('## Interrupted inputs\n- interrupted: "fresh"');
+    expect(content).not.toContain("none in the latest retained-input page");
+  });
+
+  it("renders a lone retained snapshot identically without fresh competition", async () => {
+    const snapshot = "## Interrupted inputs\nnone in the latest retained-input page";
+    const fixture = createInput({
+      attempt: createAttempt({
+        currentInboundContext: undefined,
+        runtimeContextFragments: [{ kind: "conversation-data", text: snapshot }],
+      }),
+    });
+
+    const result = await prepareContext({ ...fixture.input, isRawModelRun: true });
+
+    expect(result.runtimeContextMessageForCurrentTurn?.content).toBe(snapshot);
+    expect(result.runtimeContextFragments).toEqual([{ kind: "conversation-data", text: snapshot }]);
   });
 
   it("quotes producer data in the new-session model prompt while retaining transcript bytes", async () => {
