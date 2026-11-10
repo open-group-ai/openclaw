@@ -348,7 +348,9 @@ jobs:
   approve_openclaw_npm_release:
     needs: validate_publish_request
     if: ${{ !inputs.preflight_only && needs.validate_publish_request.result == 'success' && needs.validate_publish_request.outputs.parent_approval != 'receipt' }}
-    runs-on: [self-hosted, Linux, X64, grow-ci]
+    # open-group-super-cluster is only on r3-r9. grow-ci is also on the 48
+    # open-group-N inference-host runners; CI must not land there.
+    runs-on: [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
     environment: npm-release
     permissions:
       contents: read
@@ -361,7 +363,9 @@ jobs:
     # npm trusted publishing + provenance requires this to stay on ubuntu-latest.
     needs: [validate_publish_request, approve_openclaw_npm_release]
     if: ${{ always() && !cancelled() && !inputs.preflight_only && needs.validate_publish_request.result == 'success' && (needs.approve_openclaw_npm_release.result == 'success' || (needs.approve_openclaw_npm_release.result == 'skipped' && needs.validate_publish_request.outputs.parent_approval == 'receipt')) }}
-    runs-on: [self-hosted, Linux, X64, grow-ci]
+    # open-group-super-cluster is only on r3-r9. grow-ci is also on the 48
+    # open-group-N inference-host runners; CI must not land there.
+    runs-on: [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
     environment: npm-publish
     outputs:
       openclaw_publication: ${{ steps.publish.outputs.openclaw_publication }}
@@ -1009,7 +1013,9 @@ jobs:
     needs: publish_openclaw_npm
     if: ${{ always() && !cancelled() && github.repository == 'openclaw/openclaw' && github.event_name == 'workflow_dispatch' && !inputs.preflight_only && (needs.publish_openclaw_npm.outputs.openclaw_publication != '' || needs.publish_openclaw_npm.outputs.gateway_protocol_publication != '') }}
     continue-on-error: true
-    runs-on: [self-hosted, Linux, X64, grow-ci]
+    # open-group-super-cluster is only on r3-r9. grow-ci is also on the 48
+    # open-group-N inference-host runners; CI must not land there.
+    runs-on: [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
     timeout-minutes: 15
     permissions:
       contents: read

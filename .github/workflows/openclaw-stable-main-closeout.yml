@@ -46,7 +46,9 @@ concurrency:
 jobs:
   resolve:
     name: Resolve stable release closeout inputs
-    runs-on: [self-hosted, Linux, X64, grow-ci]
+    # open-group-super-cluster is only on r3-r9. grow-ci is also on the 48
+    # open-group-N inference-host runners; CI must not land there.
+    runs-on: [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
     timeout-minutes: 10
     outputs:
       full_release_validation_run_id: ${{ steps.inputs.outputs.full_release_validation_run_id }}
@@ -369,7 +371,9 @@ jobs:
       group: openclaw-stable-main-closeout-verify-${{ needs.resolve.outputs.tag }}
       cancel-in-progress: false
     if: ${{ needs.resolve.outputs.should_closeout == 'true' }}
-    runs-on: [self-hosted, Linux, X64, grow-ci]
+    # open-group-super-cluster is only on r3-r9. grow-ci is also on the 48
+    # open-group-N inference-host runners; CI must not land there.
+    runs-on: [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
     timeout-minutes: 20
     steps:
       - name: Checkout resolved main state

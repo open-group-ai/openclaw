@@ -17,7 +17,9 @@ env:
 
 jobs:
   resolve:
-    runs-on: [self-hosted, Linux, X64, grow-ci]
+    # open-group-super-cluster is only on r3-r9. grow-ci is also on the 48
+    # open-group-N inference-host runners; CI must not land there.
+    runs-on: [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
     permissions:
       contents: read
     outputs:
@@ -90,7 +92,9 @@ jobs:
     # Keep human approval outside the queued writer so waiting for approval
     # cannot block a tag-driven Docker release in docker-release-publish.
     # WARNING: KEEP CHANNEL PROMOTION GATED BY THE docker-release ENVIRONMENT.
-    runs-on: [self-hosted, Linux, X64, grow-ci]
+    # open-group-super-cluster is only on r3-r9. grow-ci is also on the 48
+    # open-group-N inference-host runners; CI must not land there.
+    runs-on: [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
     environment: docker-release
     permissions: {}
     steps:
@@ -108,7 +112,9 @@ jobs:
 
   promote:
     needs: [resolve, approve]
-    runs-on: [self-hosted, Linux, X64, grow-ci]
+    # open-group-super-cluster is only on r3-r9. grow-ci is also on the 48
+    # open-group-N inference-host runners; CI must not land there.
+    runs-on: [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
     concurrency:
       group: docker-release-publish
       cancel-in-progress: false

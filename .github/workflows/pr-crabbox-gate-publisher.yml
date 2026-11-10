@@ -26,7 +26,9 @@ concurrency:
 jobs:
   publish:
     name: Run AWS proof and publish gate
-    runs-on: [self-hosted, Linux, X64, grow-ci]
+    # open-group-super-cluster is only on r3-r9. grow-ci is also on the 48
+    # open-group-N inference-host runners; CI must not land there.
+    runs-on: [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
     environment: qa-live-shared
     timeout-minutes: 270
     permissions:
