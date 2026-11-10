@@ -315,12 +315,11 @@ describe("registered migration routes", () => {
     expect(commands.migrateListCommand).toHaveBeenCalledExactlyOnceWith(runtime, { json: true });
   });
 
-  it("rejects a parent dry-run before apply can mutate", async () => {
+  it("inherits a parent dry-run into apply preview", async () => {
     await runMigrate("--dry-run apply hermes --yes");
-    expect(commands.migrateApplyCommand).not.toHaveBeenCalled();
-    expect(runtime.error).toHaveBeenCalledWith(
-      expect.stringContaining("--dry-run is not supported for `openclaw migrate apply`"),
+    expect(commands.migrateApplyCommand).toHaveBeenCalledExactlyOnceWith(
+      runtime,
+      expect.objectContaining({ provider: "hermes", dryRun: true, yes: true }),
     );
-    expect(runtime.exit).toHaveBeenCalledWith(1);
   });
 });

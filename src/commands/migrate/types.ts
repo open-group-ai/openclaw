@@ -32,6 +32,7 @@ export type MigrateCommonOptions = {
 
 export type MigrateApplyOptions = MigrateCommonOptions & {
   yes?: boolean;
+  dryRun?: boolean;
   noBackup?: boolean;
   force?: boolean;
   backupOutput?: string;

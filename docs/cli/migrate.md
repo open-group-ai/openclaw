@@ -39,6 +39,7 @@ openclaw migrate apply codex --yes
 openclaw migrate apply claude --yes
 openclaw migrate apply hermes --yes
 openclaw migrate apply hermes --include-secrets --yes
+openclaw migrate apply hermes --dry-run
 openclaw onboard --flow import
 openclaw onboard --import-from claude --import-source ~/.claude
 openclaw onboard --import-from hermes --import-source ~/.hermes
@@ -46,13 +47,13 @@ openclaw onboard --import-from hermes --import-source ~/.hermes
 
 Running `openclaw migrate <provider>` with no other flags plans, previews, and (in a TTY) prompts before applying. `openclaw migrate plan <provider>` and `openclaw migrate apply <provider>` split preview and apply into separate subcommands with the same flags.
 
-Shared flags work in either position, so `openclaw migrate --no-auth-credentials apply hermes --yes` and `openclaw migrate apply hermes --no-auth-credentials --yes` behave the same. A flag placed on the subcommand overrides the same flag placed before it. `--dry-run` is the exception: `openclaw migrate apply` rejects it instead of applying, because apply always changes state.
+Shared flags work in either position, so `openclaw migrate --no-auth-credentials apply hermes --yes` and `openclaw migrate apply hermes --no-auth-credentials --yes` behave the same. A flag placed on the subcommand overrides the same flag placed before it. `openclaw migrate apply <provider> --dry-run` previews the same plan without changing state, writing backups, or creating report directories.
 
 <ParamField path="<provider>" type="string">
   Name of a registered migration provider, for example `hermes`. Run `openclaw migrate list` to see installed providers.
 </ParamField>
 <ParamField path="--dry-run" type="boolean">
-  Build the plan and exit without changing state. Not accepted by `openclaw migrate apply`; use `openclaw migrate plan <provider>` instead.
+  Build the plan and exit without changing state. `openclaw migrate apply <provider> --dry-run` previews the same selected plan without applying changes, writing backups, or creating report directories. JSON output stays redacted.
 </ParamField>
 <ParamField path="--from <path>" type="string">
   Override the source state directory. Hermes follows `$HERMES_HOME` and the active profile, then uses the platform default (`~/.hermes` or `%LOCALAPPDATA%\hermes`). Codex defaults to `~/.codex` (or `$CODEX_HOME`), Claude defaults to `~/.claude`.

@@ -307,12 +307,65 @@ export async function migratePlanCommand(
   return plan;
 }
 
+function logApplyDryRunSummary(runtime: RuntimeEnv, plan: MigrationPlan): void {
+  if (plan.summary.planned > 0) {
+    runtime.log(
+      `Dry run: ${plan.summary.planned} change${plan.summary.planned === 1 ? "" : "s"} would be applied; no changes were made.`,
+    );
+  } else {
+    runtime.log("Dry run: no changes needed; no changes were made.");
+  }
+}
+
+/** Previews a migration without applying it. Never writes state, backups, or reports. */
+async function migrateApplyDryRun(
+  runtime: RuntimeEnv,
+  opts: MigrateApplyOptions,
+  providerId: string,
+  provider: MigrationProviderPlugin,
+): Promise<MigrationPlan> {
+  if (opts.preflightPlan) {
+    const plan = applyMigrationSelections(opts.preflightPlan, resolveDefaultIncludeSecrets(opts));
+    if (opts.json) {
+      writeRuntimeJson(runtime, redactMigrationPlan(plan));
+    } else {
+      log.message(formatMigrationPreview(plan).join("\n"));
+      logApplyDryRunSummary(runtime, plan);
+    }
+    return plan;
+  }
+  if (!opts.yes && process.stdin.isTTY && !opts.json) {
+    const plan = await createInteractiveMigrationPlanWithAuthPrompt(
+      runtime,
+      { ...opts, provider: providerId },
+      provider,
+    );
+    logApplyDryRunSummary(runtime, plan);
+    return plan;
+  }
+  const plan = await migratePlanCommand(
+    runtime,
+    { ...resolveDefaultIncludeSecrets(opts), provider: providerId },
+    provider,
+  );
+  if (!opts.json) {
+    logApplyDryRunSummary(runtime, plan);
+  }
+  return plan;
+}
+
 /** Applies a migration non-interactively when `yes` is true. */
 export async function migrateApplyCommand(
   runtime: RuntimeEnv,
   opts: MigrateApplyOptions & { yes: true },
   provider?: MigrationProviderPlugin,
 ): Promise<MigrationApplyResult>;
+/** Previews a migration without changing state when `dryRun` is true. */
+export async function migrateApplyCommand(
+  runtime: RuntimeEnv,
+  opts: MigrateApplyOptions & { dryRun: true },
+  provider?: MigrationProviderPlugin,
+): Promise<MigrationPlan>;
 /** Plans interactively when needed, prompts, then applies the selected migration. */
 export async function migrateApplyCommand(
   runtime: RuntimeEnv,
@@ -331,10 +384,10 @@ export async function migrateApplyCommand(
     );
   }
   assertVerifyPluginAppsProvider(providerId, opts);
-  if (opts.noBackup && !opts.force) {
+  if (!opts.dryRun && opts.noBackup && !opts.force) {
     throw new Error("--no-backup requires --force because it skips the automatic rollback copy.");
   }
-  if (!opts.yes && !process.stdin.isTTY) {
+  if (!opts.dryRun && !opts.yes && !process.stdin.isTTY) {
     throw new Error(
       `openclaw migrate apply requires --yes in non-interactive mode. Preview first with ${formatCliCommand(`openclaw migrate plan '${providerId.replaceAll("'", "'\\''")}'`)}.`,
     );
@@ -345,6 +398,9 @@ export async function migrateApplyCommand(
       opts.configOverride,
       async (owned) => await migrateApplyCommand(runtime, opts, owned),
     );
+  }
+  if (opts.dryRun) {
+    return await migrateApplyDryRun(runtime, opts, providerId, provider);
   }
   let applyOpts = resolveDefaultIncludeSecrets(opts);
   if (!opts.yes) {

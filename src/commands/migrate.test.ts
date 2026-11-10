@@ -589,4 +589,89 @@ describe("migrateApplyCommand", () => {
       expect(String(logPayload.reportDir)).toContain("/migration/hermes/");
     },
   );
+
+  it("previews apply changes without backup, apply, or report writes", async () => {
+    const planned = plan();
+    mocks.provider.plan.mockResolvedValue(planned);
+    const localRuntime = { ...runtime, log: vi.fn(), error: vi.fn() };
+
+    const result = await migrateApplyCommand(localRuntime, {
+      provider: "hermes",
+      dryRun: true,
+    });
+
+    expect(result).toBe(planned);
+    expect(mocks.provider.plan).toHaveBeenCalledTimes(1);
+    expect(mocks.backupCreateCommand).not.toHaveBeenCalled();
+    expect(mocks.provider.apply).not.toHaveBeenCalled();
+    expect(mocks.clackLogMessage).toHaveBeenCalledWith(
+      expect.stringContaining("Migration preview:"),
+    );
+    expect(localRuntime.log).toHaveBeenCalledWith(
+      expect.stringContaining("Dry run: 1 change would be applied; no changes were made."),
+    );
+    await expect(fs.readdir(testStateDir)).rejects.toThrow();
+  });
+
+  it("reports no changes needed for an already-current apply dry-run", async () => {
+    const current = plan({ items: [] });
+    mocks.provider.plan.mockResolvedValue(current);
+    const localRuntime = { ...runtime, log: vi.fn(), error: vi.fn() };
+
+    const result = await migrateApplyCommand(localRuntime, {
+      provider: "hermes",
+      dryRun: true,
+    });
+
+    expect(result).toBe(current);
+    expect(mocks.backupCreateCommand).not.toHaveBeenCalled();
+    expect(mocks.provider.apply).not.toHaveBeenCalled();
+    expect(localRuntime.log).toHaveBeenCalledWith(
+      "Dry run: no changes needed; no changes were made.",
+    );
+    await expect(fs.readdir(testStateDir)).rejects.toThrow();
+  });
+
+  it("redacts secrets in apply dry-run preview and JSON output", async () => {
+    const planned = secretPlan();
+    mocks.provider.plan.mockResolvedValue(planned);
+    const localRuntime = { ...runtime, log: vi.fn(), error: vi.fn() };
+
+    await migrateApplyCommand(localRuntime, { provider: "hermes", dryRun: true });
+
+    const preview = String(mocks.clackLogMessage.mock.calls[0]?.[0] ?? "");
+    expect(preview).toContain("[redacted]");
+    expect(preview).not.toContain("short-dev-key");
+    expectNoApply();
+
+    vi.clearAllMocks();
+    mocks.provider.plan.mockResolvedValue(planned);
+    const { logs, jsonRuntime } = captureRuntime();
+    const jsonResult = await migrateApplyCommand(jsonRuntime, {
+      provider: "hermes",
+      dryRun: true,
+      json: true,
+    });
+
+    expect(jsonResult).toBe(planned);
+    expect(logs).toHaveLength(1);
+    expect(logs[0]).toContain("[redacted]");
+    expect(logs[0]).not.toContain("short-dev-key");
+    expectNoApply();
+  });
+
+  it("still applies and keeps backup behavior without dry-run", async () => {
+    const planned = plan();
+    mockMigration(planned);
+    const localRuntime = { ...runtime, log: vi.fn(), error: vi.fn() };
+
+    await migrateApplyCommand(localRuntime, { provider: "hermes", yes: true });
+
+    expect(mocks.backupCreateCommand).toHaveBeenCalledWith(expect.anything(), {
+      output: undefined,
+      verify: true,
+    });
+    expect(mocks.provider.apply).toHaveBeenCalledTimes(1);
+    expect(String(mocks.clackLogMessage.mock.calls[0]?.[0] ?? "")).toContain("Migrated");
+  });
 });

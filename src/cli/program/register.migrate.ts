@@ -85,14 +85,6 @@ function readSharedMigrationOptions(opts: Record<string, unknown>, command?: Com
   };
 }
 
-function rejectUnsupportedApplyDryRun(command: Command): void {
-  if (inheritOptionFromParent<boolean>(command, "dryRun") === true) {
-    throw new Error(
-      "--dry-run is not supported for `openclaw migrate apply`. Run `openclaw migrate plan <provider>` or `openclaw migrate <provider> --dry-run` instead.",
-    );
-  }
-}
-
 export function registerMigrateCommand(program: Command) {
   const migrate = addMigrationSourceOptions(
     program
@@ -118,6 +110,10 @@ export function registerMigrateCommand(program: Command) {
           [
             "openclaw migrate apply hermes --yes",
             "Apply Hermes migration non-interactively after writing a verified backup.",
+          ],
+          [
+            "openclaw migrate apply hermes --dry-run",
+            "Preview Hermes migration without changing state or writing a backup.",
           ],
           [
             "openclaw migrate hermes --no-auth-credentials",
@@ -168,16 +164,17 @@ export function registerMigrateCommand(program: Command) {
     migrate.command("apply <provider>").description("Apply a migration after a verified backup"),
   )
     .option("--yes", "Apply without prompting", false)
+    .option("--dry-run", "Preview only; do not apply changes", false)
     .option("--backup-output <path>", "Pre-migration backup archive path or directory")
     .option("--no-backup", "Skip the pre-migration OpenClaw backup")
     .option("--force", "Allow dangerous options such as --no-backup", false)
     .action(async (provider, opts, command) => {
       await runCommandWithRuntime(defaultRuntime, async () => {
-        rejectUnsupportedApplyDryRun(command);
         await migrateApplyCommand(defaultRuntime, {
           provider: provider as string,
           ...readSharedMigrationOptions(opts, command),
           yes: Boolean(readMigrationOption(command, "yes", opts.yes)),
+          dryRun: Boolean(readMigrationOption(command, "dryRun", opts.dryRun)),
           backupOutput: readMigrationOption(
             command,
             "backupOutput",
