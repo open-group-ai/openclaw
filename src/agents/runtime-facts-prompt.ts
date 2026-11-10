@@ -12,6 +12,14 @@ import {
 } from "./runtime-execution-facts.js";
 import { buildActiveSubagentRuntimeContext } from "./subagents/registry/subagent-active-context.js";
 
+/** Heading of the retained-input snapshot section in the runtime-context message. */
+export const INTERRUPTED_INPUTS_SECTION_HEADING = "## Interrupted inputs";
+/** Explicit empty marker: the latest retained-input page holds no interrupted inputs. */
+export const INTERRUPTED_INPUTS_NONE_LINE = "none in the latest retained-input page";
+/** Deterministic rendering of the section when no interrupted inputs exist. */
+export const INTERRUPTED_INPUTS_NONE_SECTION =
+  `${INTERRUPTED_INPUTS_SECTION_HEADING}\n${INTERRUPTED_INPUTS_NONE_LINE}`;
+
 export async function buildRuntimeFactsContext(
   params: ExecutionHostRuntimeFactsParams & {
     cfg: OpenClawConfig;
@@ -56,7 +64,7 @@ export async function buildRuntimeFactsContext(
         });
       facts.push({
         kind: "conversation-data",
-        text: ["## Interrupted inputs", ...(lines.length ? lines : ["none in the latest retained-input page"])].join("\n"),
+        text: [INTERRUPTED_INPUTS_SECTION_HEADING, ...(lines.length ? lines : [INTERRUPTED_INPUTS_NONE_LINE])].join("\n"),
       });
     } catch {
       // A failed history read is not evidence that the retained-input page is empty.

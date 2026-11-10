@@ -1,10 +1,16 @@
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import * as pendingInputs from "../config/sessions/session-pending-input-history.js";
 import * as execApprovals from "../infra/exec-approvals.js";
 import { withMockedPlatform } from "../test-utils/vitest-spies.js";
 import type { MediaGenerationOperation } from "./media-generation-activity.js";
 import * as mediaActivity from "./media-generation-activity.js";
-import { buildRuntimeFactsContext } from "./runtime-facts-prompt.js";
+import {
+  buildRuntimeFactsContext,
+  INTERRUPTED_INPUTS_NONE_LINE,
+  INTERRUPTED_INPUTS_NONE_SECTION,
+  INTERRUPTED_INPUTS_SECTION_HEADING,
+} from "./runtime-facts-prompt.js";
+import { supersedeRuntimeContextSnapshots } from "./internal-runtime-context.js";
 
 const params = { capabilityToolNames: new Set(["exec"]), agentId: "main", cfg: {} };
 const fact = (text: string) => ({ kind: "conversation-data", text });
@@ -224,4 +230,85 @@ it("renders the latest retained-input page in a stable, bounded summary", async 
     fact('## Interrupted inputs\n- interrupted: "first"\n- interrupted: "second"'),
   );
   expect(read).toHaveBeenLastCalledWith(expect.anything(), { limit: 10 });
+});
+
+describe("interrupted inputs none state", () => {
+  const target = {
+    ...params,
+    executionHost: false,
+    sessionTarget: { sessionId: "session", sessionKey: "agent:main:session" },
+  };
+  const interruptedText = (fragments: Awaited<ReturnType<typeof buildRuntimeFactsContext>>) =>
+    fragments.find((fragment) => fragment.text.startsWith(INTERRUPTED_INPUTS_SECTION_HEADING))?.text;
+
+  it("renders the exact none section when the retained-input page is empty", async () => {
+    vi.spyOn(pendingInputs, "listSessionPendingInputs").mockResolvedValue({ items: [], total: 0 });
+    const fragments = await buildRuntimeFactsContext(target);
+    expect(interruptedText(fragments)).toBe(INTERRUPTED_INPUTS_NONE_SECTION);
+    expect(INTERRUPTED_INPUTS_NONE_SECTION).toBe(
+      "## Interrupted inputs\nnone in the latest retained-input page",
+    );
+    expect(fragments).toContainEqual(fact(INTERRUPTED_INPUTS_NONE_SECTION));
+  });
+
+  it("lists interrupted inputs without the none line when the page is non-empty", async () => {
+    vi.spyOn(pendingInputs, "listSessionPendingInputs").mockResolvedValue({
+      total: 1,
+      items: [
+        { id: "a", runId: "a", acceptedAt: 1, state: "interrupted", message: { role: "user", content: "first", timestamp: 1 } },
+      ],
+    });
+    const fragments = await buildRuntimeFactsContext(target);
+    const text = interruptedText(fragments);
+    expect(text).toBe('## Interrupted inputs\n- interrupted: "first"');
+    expect(text).not.toContain(INTERRUPTED_INPUTS_NONE_LINE);
+  });
+
+  it.each([
+    ["stale entries then an explicit none", "non-empty-first"],
+    ["an explicit none then stale entries", "none-first"],
+  ])("keeps only the latest snapshot of the family: %s", async (_label, order) => {
+    const read = vi.spyOn(pendingInputs, "listSessionPendingInputs");
+    read.mockResolvedValueOnce({ items: [], total: 0 });
+    const noneText = interruptedText(await buildRuntimeFactsContext(target));
+    read.mockResolvedValueOnce({
+      total: 1,
+      items: [
+        { id: "a", runId: "a", acceptedAt: 1, state: "interrupted", message: { role: "user", content: "first", timestamp: 1 } },
+      ],
+    });
+    const listedText = interruptedText(await buildRuntimeFactsContext(target));
+    expect(noneText).toBe(INTERRUPTED_INPUTS_NONE_SECTION);
+    const familyOf = (text: string) => text.split("\n", 1)[0];
+    const stale = { kind: "conversation-data" as const, snapshotFamily: familyOf(listedText!), text: listedText! };
+    const none = { kind: "conversation-data" as const, snapshotFamily: familyOf(noneText!), text: noneText! };
+    const fragments = order === "none-first" ? [none, stale] : [stale, none];
+    const kept = supersedeRuntimeContextSnapshots(fragments);
+    expect(kept).toEqual([order === "none-first" ? stale : none]);
+    // An explicit none in the latest snapshot means no active work survives it.
+    if (order !== "none-first") {
+      expect(kept[0]?.text).not.toContain('"first"');
+    }
+  });
+
+  it("leaves Temporal Context unchanged and renders byte-identical output", async () => {
+    vi.spyOn(pendingInputs, "listSessionPendingInputs").mockResolvedValue({ items: [], total: 0 });
+    vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-09-01T07:00:00Z"));
+    const input = {
+      ...target,
+      cfg: { agents: { defaults: { userTimezone: "America/Los_Angeles" } } },
+      capabilityToolNames: new Set(["session_status"]),
+    };
+    const first = await buildRuntimeFactsContext(input);
+    const second = await buildRuntimeFactsContext(input);
+    expect(JSON.stringify(second)).toBe(JSON.stringify(first));
+    expect(first).toContainEqual(
+      fact(
+        "## Temporal Context\nCurrent date: 2026-09-01\nTime zone: America/Los_Angeles\nFor the exact current time, use `session_status`.",
+      ),
+    );
+    expect(interruptedText(first)).toBe(
+      "## Interrupted inputs\nnone in the latest retained-input page",
+    );
+  });
 });
