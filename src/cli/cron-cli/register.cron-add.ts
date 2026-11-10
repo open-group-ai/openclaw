@@ -22,7 +22,6 @@ import {
   assertCronCliJobSpec,
   assertCronTimeoutSupported,
   coerceCronDeliveryPreviews,
-  enrichCronJsonWithStatus,
   handleCronCliError,
   parseCronCommandArgv,
   parseCronCommandEnv,
@@ -33,6 +32,7 @@ import {
   parseCronThinkingOption,
   printCronJson,
   printCronList,
+  toAutomationListJson,
   warnIfCronSchedulerDisabled,
 } from "./shared.js";
 import { normalizeCronSessionTargetOption, parseCronThreadIdOption } from "./thread-id-shared.js";
@@ -77,7 +77,7 @@ export function registerCronListCommand(cron: Command) {
           }
           const res = await listCronJobsFromGateway(opts, listParams);
           if (opts.json) {
-            printCronJson(enrichCronJsonWithStatus(res));
+            printCronJson(toAutomationListJson(res.jobs));
             return;
           }
           const deliveryPreviews = coerceCronDeliveryPreviews(res);

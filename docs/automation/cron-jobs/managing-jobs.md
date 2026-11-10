@@ -125,6 +125,10 @@ openclaw automations list
 # Include disabled jobs
 openclaw automations list --all
 
+# Machine-readable list (stable JSON array, stdout only; diagnostics go to stderr)
+openclaw automations list --json
+openclaw automations list --all --json
+
 # Get one stored job as JSON
 openclaw automations get <jobId>
 
@@ -160,6 +164,36 @@ openclaw automations remove <jobId>
 openclaw automations create "0 6 * * *" "Check ops queue" --name "Ops sweep" --session isolated --agent ops
 openclaw automations edit <jobId> --clear-agent
 ```
+
+### Machine-readable list output
+
+`openclaw automations list [--all] --json` prints a stable JSON array to stdout
+(one entry per automation) and leaves the default human-readable table unchanged.
+`--all` includes disabled jobs; without it only enabled jobs are listed. An empty
+list prints `[]` with exit code 0. Diagnostics go to stderr, so
+`openclaw automations list --json | node -e "JSON.parse(require('fs').readFileSync(0,'utf8'))"`
+exits 0.
+
+Each entry carries only summary fields the automation store already exposes:
+
+```json
+[
+  {
+    "id": "job-000",
+    "name": "Morning brief",
+    "schedule": { "kind": "every", "everyMs": 3600000 },
+    "enabled": true,
+    "lastRunAt": "2026-09-05T04:51:35.278Z",
+    "nextRunAt": "2026-09-05T06:51:35.278Z",
+    "hasScratch": false
+  }
+]
+```
+
+`lastRunAt` and `nextRunAt` are ISO-8601 UTC timestamps, or `null` when unknown.
+`hasScratch` is a boolean presence flag only; scratch contents are never printed.
+Use `openclaw automations scratch <jobId> --get` to read scratch and
+`openclaw automations get <jobId>` for one full job definition.
 
 Conversation automation views use the conversation's physical key and selected agent. With `session.scope: "global"`, jobs targeting `session:global` or that agent's main-session alias belong to its `global` conversation. An explicitly agent-qualified named target remains separate, and another agent's `global` conversation keeps its own jobs.
 

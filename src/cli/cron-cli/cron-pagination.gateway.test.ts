@@ -33,11 +33,18 @@ const listRequests = () => rpc.mock.calls.filter(([method]) => method === "cron.
 const listOffsets = () => listRequests().map((call) => (call[2] as { offset: number }).offset);
 const output = (stream: "log" | "error") => runtime[stream].mock.calls.flat().join("\n");
 const readJson = (): unknown => runtime.writeJson.mock.calls.at(-1)?.[0];
-type Inventory = {
-  jobs: Array<CronJob & { effectiveAgentId?: string | null }>;
-  deliveryPreviews: Record<string, { label: string; detail: string }>;
+// `list --json` emits the stable summary array (id, name, schedule, enabled,
+// lastRunAt, nextRunAt, hasScratch); full rows stay on `show/get --json`.
+type ListJsonRow = {
+  id: string;
+  name: string | null;
+  schedule: unknown;
+  enabled: boolean;
+  lastRunAt: string | null;
+  nextRunAt: string | null;
+  hasScratch: boolean;
 };
-const inventory = () => readJson() as Inventory;
+const inventoryRows = () => readJson() as ListJsonRow[];
 const stderrIsTTY = Object.getOwnPropertyDescriptor(process.stderr, "isTTY");
 function expectIncludes(text: string, ...parts: string[]) {
   for (const part of parts) {
@@ -66,7 +73,8 @@ const expectSingleRpc = (method: string, params: unknown) =>
 function match(id: string, name: string, schedule = "every 1m", enabled = true) {
   return { id, name, schedule, enabled, status: enabled ? "idle" : "disabled" };
 }
-const jobIds = (jobs: CronJob[]) => jobs.map(({ id }) => id).toSorted();
+const jobIds = (jobs: Array<Pick<CronJob, "id"> | Pick<ListJsonRow, "id">>) =>
+  jobs.map(({ id }) => id).toSorted();
 const patchPage = (patch: Record<string, unknown>) => (page: unknown) => ({
   ...(page as Record<string, unknown>),
   ...patch,
@@ -209,7 +217,15 @@ it.each([true, false])("shows disabled streams, running=%s", async (running) => 
   );
   const expected = { id: job.id, status: running ? "running" : "ok", state: job.state };
   await runCron(["list", "--json"]);
-  expect(inventory().jobs[0]).toMatchObject(expected);
+  // The summary array carries identity and timing; status/detail stay human + show.
+  expect(inventoryRows()).toHaveLength(1);
+  expect(inventoryRows()[0]).toMatchObject({
+    id: job.id,
+    enabled: true,
+    hasScratch: false,
+  });
+  expect(inventoryRows()[0]).not.toHaveProperty("status");
+  expect(inventoryRows()[0]).not.toHaveProperty("state");
   await runCron(["show", job.id, "--json"]);
   expect(readJson()).toMatchObject(expected);
 });
@@ -233,12 +249,10 @@ it("lists ownerless jobs and filters by resolved owner", async () => {
       .find((line) => line.includes("job-002")),
   ).toContain("ops");
   await runCron(["list", "--all", "--json"]);
-  const owned = { id: "job-002", effectiveAgentId: "ops", sessionKey: "agent:ops:main" };
-  expect(inventory().jobs).toMatchObject([{ id: "job-000", effectiveAgentId: null }, owned]);
-  expect(inventory().jobs[0]?.agentId).toBeUndefined();
-  expect(inventory().deliveryPreviews["job-000"]?.detail).toContain("no resolvable owner");
+  // Ownership resolution stays Gateway-side; the summary array proves filtering.
+  expect(inventoryRows()).toMatchObject([{ id: "job-000" }, { id: "job-002" }]);
   await runCron(["list", "--all", "--json", "--agent", "ops"]);
-  expect(inventory().jobs).toMatchObject([owned]);
+  expect(inventoryRows()).toMatchObject([{ id: "job-002" }]);
 });
 
 it.each([false, true])("paginates filtered inventories, JSON=%s", async (json) => {
@@ -258,11 +272,9 @@ it.each([false, true])("paginates filtered inventories, JSON=%s", async (json) =
     "automations",
   );
   if (json) {
-    expect(jobIds(inventory().jobs)).toEqual(jobIds(matching));
-    expect(inventory().jobs[0]?.effectiveAgentId).toBe("ops");
-    expect(inventory().deliveryPreviews["job-200"]).toMatchObject({ label: "not requested" });
+    expect(jobIds(inventoryRows())).toEqual(jobIds(matching));
     await runCron(["list", "--query", "no-matching-automation", "--json"]);
-    expect(inventory().jobs).toEqual([]);
+    expect(inventoryRows()).toEqual([]);
   } else {
     const text = output("log");
     expectIncludes(text, "Backup 0", "Backup 200");
@@ -287,11 +299,11 @@ it.each([
     },
   });
   await runCron(["list", "--json"]);
-  const result = inventory();
-  expect(result.jobs).toHaveLength(count);
-  expect(result.jobs.some((job) => job.id === "job-000")).toBe(false);
+  const result = inventoryRows();
+  expect(result).toHaveLength(count);
+  expect(result.some((job) => job.id === "job-000")).toBe(false);
   expect(
-    result.jobs.some((job) => job.id === (change === "replacement" ? "job-900" : "job-001")),
+    result.some((job) => job.id === (change === "replacement" ? "job-900" : "job-001")),
   ).toBe(change === "replacement");
   expect(listOffsets()).toEqual(offsets);
 });
@@ -302,7 +314,7 @@ it.each([0, 201])("detects and lists a protocol-v4 inventory of %i jobs", async 
     getError: legacyGetError,
   });
   await runCron(["list", "--json"]);
-  expect(jobIds(inventory().jobs)).toEqual(jobIds(createJobs(count)));
+  expect(jobIds(inventoryRows())).toEqual(jobIds(createJobs(count)));
 });
 
 it.each(["protocol", "revision"])("rejects repeated %s churn", async (change) => {
