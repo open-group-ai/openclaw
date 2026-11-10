@@ -45,7 +45,9 @@ concurrency:
 jobs:
   admit_request:
     name: Admit exact requested Telegram behavior proof
-    runs-on: [self-hosted, Linux, X64, grow-ci]
+    # open-group-super-cluster is only on r3-r9. grow-ci is also on the 48
+    # open-group-N inference-host runners; CI must not land there.
+    runs-on: [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
     steps:
       - name: Check maintainer authority and exact PR head
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
@@ -233,7 +235,9 @@ jobs:
     name: Finalize request-bound evidence
     needs: [admit_request, run_telegram_proof]
     if: ${{ always() && needs.admit_request.result == 'success' }}
-    runs-on: [self-hosted, Linux, X64, grow-ci]
+    # open-group-super-cluster is only on r3-r9. grow-ci is also on the 48
+    # open-group-N inference-host runners; CI must not land there.
+    runs-on: [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
     timeout-minutes: 15
     steps:
       - name: Checkout trusted finalizer

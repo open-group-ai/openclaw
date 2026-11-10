@@ -838,7 +838,9 @@ jobs:
         validate_release_publish_approval,
       ]
     if: always() && github.event_name == 'workflow_dispatch' && inputs.dry_run != true && needs.preview_plugins_clawhub.outputs.has_publish_candidates == 'true' && needs.validate_release_publish_approval.result == 'success' && needs.pack_plugins_clawhub_artifacts.result == 'success' && needs.seal_clawhub_transactions.result == 'success'
-    runs-on: [self-hosted, Linux, X64, grow-ci]
+    # open-group-super-cluster is only on r3-r9. grow-ci is also on the 48
+    # open-group-N inference-host runners; CI must not land there.
+    runs-on: [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
     # A verified parent receipt replaces the human gate; direct dispatch keeps it.
     environment: ${{ needs.validate_release_publish_approval.outputs.parent_approval != 'receipt' && 'clawhub-plugin-release' || '' }}
     permissions:

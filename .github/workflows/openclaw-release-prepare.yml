@@ -37,7 +37,9 @@ jobs:
   prepare:
     name: Start or recover exact npm and ClawHub preparation
     if: github.repository == 'openclaw/openclaw' && inputs.operation == 'prepare'
-    runs-on: [self-hosted, Linux, X64, grow-ci]
+    # open-group-super-cluster is only on r3-r9. grow-ci is also on the 48
+    # open-group-N inference-host runners; CI must not land there.
+    runs-on: [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
     timeout-minutes: 10
     permissions:
       actions: write
@@ -94,7 +96,9 @@ jobs:
   seal:
     name: Verify and seal prepared publication
     needs: prepare
-    runs-on: [self-hosted, Linux, X64, grow-ci]
+    # open-group-super-cluster is only on r3-r9. grow-ci is also on the 48
+    # open-group-N inference-host runners; CI must not land there.
+    runs-on: [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -149,7 +153,9 @@ jobs:
   admit_qualification:
     name: Admit frozen candidate qualification
     if: github.repository == 'openclaw/openclaw' && inputs.operation == 'admit-qualification'
-    runs-on: [self-hosted, Linux, X64, grow-ci]
+    # open-group-super-cluster is only on r3-r9. grow-ci is also on the 48
+    # open-group-N inference-host runners; CI must not land there.
+    runs-on: [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
     timeout-minutes: 10
     permissions:
       actions: read

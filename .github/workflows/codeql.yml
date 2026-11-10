@@ -59,7 +59,9 @@ permissions:
 jobs:
   scope:
     if: ${{ ((github.event_name != 'schedule' || github.repository == 'openclaw/openclaw') && (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' || inputs.profile == 'all' || inputs.profile == 'security')) }}
-    runs-on: [self-hosted, Linux, X64, grow-ci]
+    # open-group-super-cluster is only on r3-r9. grow-ci is also on the 48
+    # open-group-N inference-host runners; CI must not land there.
+    runs-on: [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
     permissions:
       actions: read
       contents: read

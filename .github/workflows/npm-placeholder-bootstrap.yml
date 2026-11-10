@@ -29,7 +29,9 @@ env:
 jobs:
   plan:
     name: Plan npm placeholder publication
-    runs-on: [self-hosted, Linux, X64, grow-ci]
+    # open-group-super-cluster is only on r3-r9. grow-ci is also on the 48
+    # open-group-N inference-host runners; CI must not land there.
+    runs-on: [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
     timeout-minutes: 15
     permissions:
       contents: read
@@ -178,7 +180,9 @@ jobs:
   verify:
     name: Verify npm placeholder publication
     needs: plan
-    runs-on: [self-hosted, Linux, X64, grow-ci]
+    # open-group-super-cluster is only on r3-r9. grow-ci is also on the 48
+    # open-group-N inference-host runners; CI must not land there.
+    runs-on: [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
     timeout-minutes: 15
     permissions:
       actions: read
@@ -261,7 +265,9 @@ jobs:
     name: Publish npm placeholders
     needs: [plan, verify]
     if: inputs.dry_run != true
-    runs-on: [self-hosted, Linux, X64, grow-ci]
+    # open-group-super-cluster is only on r3-r9. grow-ci is also on the 48
+    # open-group-N inference-host runners; CI must not land there.
+    runs-on: [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
     timeout-minutes: 30
     environment: npm-release
     permissions:

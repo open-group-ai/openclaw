@@ -34,7 +34,9 @@ permissions:
 jobs:
   scope:
     name: Detect macOS scan scope
-    runs-on: [self-hosted, Linux, X64, grow-ci]
+    # open-group-super-cluster is only on r3-r9. grow-ci is also on the 48
+    # open-group-N inference-host runners; CI must not land there.
+    runs-on: [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
     outputs:
       should-scan: ${{ steps.scope.outputs.should-scan }}
       shared-scan: ${{ steps.scope.outputs.shared-scan }}
@@ -397,7 +399,9 @@ jobs:
     name: Scan macOS dead code
     needs: [scope, macos-index]
     if: ${{ always() && needs.scope.outputs.should-scan == 'true' && needs.macos-index.result != 'cancelled' }}
-    runs-on: [self-hosted, Linux, X64, grow-ci]
+    # open-group-super-cluster is only on r3-r9. grow-ci is also on the 48
+    # open-group-N inference-host runners; CI must not land there.
+    runs-on: [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
     steps:
       - name: Enforce macOS app report
         env:
@@ -409,7 +413,9 @@ jobs:
     name: Scan shared kit from macOS
     needs: [scope, macos-index]
     if: ${{ always() && needs.scope.outputs.shared-scan == 'true' && needs.macos-index.result != 'cancelled' }}
-    runs-on: [self-hosted, Linux, X64, grow-ci]
+    # open-group-super-cluster is only on r3-r9. grow-ci is also on the 48
+    # open-group-N inference-host runners; CI must not land there.
+    runs-on: [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
     steps:
       - name: Enforce macOS shared scan
         env:
@@ -683,7 +689,9 @@ jobs:
     name: Scan iOS dead code
     needs: [scope, ios-index]
     if: ${{ always() && needs.scope.outputs.ios-scan == 'true' && needs.ios-index.result != 'cancelled' }}
-    runs-on: [self-hosted, Linux, X64, grow-ci]
+    # open-group-super-cluster is only on r3-r9. grow-ci is also on the 48
+    # open-group-N inference-host runners; CI must not land there.
+    runs-on: [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
     steps:
       - name: Enforce iOS app report
         env:
@@ -695,7 +703,9 @@ jobs:
     name: Scan shared kit from iOS
     needs: [scope, ios-index]
     if: ${{ always() && needs.scope.outputs.shared-scan == 'true' && needs.ios-index.result != 'cancelled' }}
-    runs-on: [self-hosted, Linux, X64, grow-ci]
+    # open-group-super-cluster is only on r3-r9. grow-ci is also on the 48
+    # open-group-N inference-host runners; CI must not land there.
+    runs-on: [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
     steps:
       - name: Enforce iOS shared scan
         env:
@@ -707,7 +717,9 @@ jobs:
     name: Intersect shared OpenClawKit dead code
     needs: [scope, scan-ios-shared, scan-macos]
     if: ${{ always() && needs.scope.outputs.shared-scan == 'true' && needs.scan-ios-shared.result != 'cancelled' && needs.scan-macos.result != 'cancelled' }}
-    runs-on: [self-hosted, Linux, X64, grow-ci]
+    # open-group-super-cluster is only on r3-r9. grow-ci is also on the 48
+    # open-group-N inference-host runners; CI must not land there.
+    runs-on: [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
     permissions:
       actions: read
       contents: read

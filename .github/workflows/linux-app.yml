@@ -50,7 +50,9 @@ jobs:
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' || !inputs.windows_only) }}
     name: Build Linux companion
     # Match the release build base for native tests and manually built bundles.
-    runs-on: [self-hosted, Linux, X64, grow-ci]
+    # open-group-super-cluster is only on r3-r9. grow-ci is also on the 48
+    # open-group-N inference-host runners; CI must not land there.
+    runs-on: [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
     # Leave room for cold source packaging and the native desktop proof afterward.
     timeout-minutes: 105
     permissions:

@@ -71,7 +71,9 @@ jobs:
   approve_recovery:
     needs: validate_recovery
     if: ${{ !inputs.advisory }}
-    runs-on: [self-hosted, Linux, X64, grow-ci]
+    # open-group-super-cluster is only on r3-r9. grow-ci is also on the 48
+    # open-group-N inference-host runners; CI must not land there.
+    runs-on: [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
     environment: docker-release
     permissions: {}
     steps:
@@ -83,7 +85,9 @@ jobs:
   publish:
     needs: [validate_recovery, approve_recovery]
     if: ${{ always() && (inputs.advisory || (needs.validate_recovery.result == 'success' && needs.approve_recovery.result == 'success')) }}
-    runs-on: [self-hosted, Linux, X64, grow-ci]
+    # open-group-super-cluster is only on r3-r9. grow-ci is also on the 48
+    # open-group-N inference-host runners; CI must not land there.
+    runs-on: [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
     timeout-minutes: 30
     # Release mirroring is advisory; approved recovery must fail visibly.
     continue-on-error: ${{ inputs.advisory == true }}
