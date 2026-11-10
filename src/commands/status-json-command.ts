@@ -6,6 +6,7 @@ import { readBackupRunFreshness } from "../state/backup-run-records.js";
 import { collectRecoveryDiskUsage } from "./recovery-disk-usage.js";
 import { resolveStatusUpdateChannelInfo } from "./status-all/format.js";
 import { resolveStatusDatabaseEngines } from "./status-database-engines.js";
+import { resolveStatusModelsBlock } from "./status-models.js";
 import type { StatusOverviewSurface } from "./status-overview-surface.ts";
 import {
   reportStatusScanFailure,
@@ -101,6 +102,7 @@ export async function runStatusJsonCommand(params: {
     update: surface.update,
   });
   const databaseFamilies = describeDatabaseEngineSelection(surface.cfg, databaseEngines.stores);
+  const modelsBlock = resolveStatusModelsBlock(scan.cfg);
   const payload = {
     ...scan.summary,
     recoveryCopies:
@@ -135,6 +137,10 @@ export async function runStatusJsonCommand(params: {
     gatewayService: surface.gatewayService,
     nodeService: surface.nodeService,
     agents: scan.agentStatus,
+    models: {
+      default: modelsBlock.defaultModel,
+      aliases: modelsBlock.aliases,
+    },
     ...(scan.configDiagnostics ? { configDiagnostics: scan.configDiagnostics } : {}),
     secretDiagnostics: scan.secretDiagnostics,
     ...(projectedSecurityAudit ? { securityAudit: projectedSecurityAudit } : {}),

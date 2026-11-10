@@ -43,6 +43,7 @@ it.each([true, false])("orders and trims report sections (full=%s)", async (full
     "# OpenClaw status",
     "# Overview",
     ...(full ? ["# Plugin compatibility"] : []),
+    "# Models",
     "# Security audit",
     "# Channels",
     "# Sessions",

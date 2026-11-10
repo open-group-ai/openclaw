@@ -256,6 +256,7 @@ describe("runStatusJsonCommand", () => {
       gatewayService: { label: "LaunchAgent", installed: true, loadedText: "loaded" },
       nodeService: { label: "node", installed: true, loadedText: "loaded" },
       agents: { agents: [{ id: "main" }], defaultId: "main" },
+      models: { default: null, aliases: [] },
       configDiagnostics: {
         path: "/tmp/openclaw.json",
         issues: [{ path: "gateway.port", message: "invalid" }],

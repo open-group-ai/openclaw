@@ -29,6 +29,7 @@ import {
 import { statusOverviewTableColumns } from "./status-all/report-tables.js";
 import { appendStatusReportLines, appendStatusReportTable } from "./status-all/text-report.js";
 import { resolveStatusDatabaseEngines } from "./status-database-engines.js";
+import { formatStatusModelsLines, resolveStatusModelsBlock } from "./status-models.js";
 import { buildStatusCommandOverviewRows } from "./status-overview-rows.ts";
 import { formatPromptCacheCompact, formatTokensCompact } from "./status.format.js";
 import type { StatusScanResult } from "./status.scan-result.ts";
@@ -358,6 +359,11 @@ export async function buildStatusCommandReportLines(
   if (modelSelectionLines.length > 0) {
     appendStatusReportLines(report, "Model selection", modelSelectionLines);
   }
+  appendStatusReportLines(
+    report,
+    "Models",
+    formatStatusModelsLines(resolveStatusModelsBlock(params.surface.cfg)),
+  );
   appendStatusReportLines(report, "Security audit", securityAuditLines);
   for (const [title, columns, rows, emptyMessage] of [
     ["Channels", channelsColumns, channelsRows, "No channels configured"],
