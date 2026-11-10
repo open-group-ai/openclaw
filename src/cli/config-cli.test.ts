@@ -631,17 +631,35 @@ describe("config cli", () => {
         messages: ["Config file not found:"],
         excludes: [],
       },
+      {
+        name: "a schema violation",
+        snapshot: () =>
+          makeInvalidSnapshot({
+            issues: [
+              {
+                path: "gateway.port",
+                message: "Invalid input: expected number, received string",
+              },
+            ],
+          }),
+        messages: ["gateway.port", "expected number"],
+        excludes: [],
+      },
     ])(
       "reports actionable validation errors for $name",
       async ({ snapshot, messages, excludes }) => {
         setSnapshotOnce(snapshot());
 
-        await expect(runConfigCommand(["config", "validate"])).rejects.toThrow(ExitError);
+        await expect(runConfigCommand(["config", "validate"])).rejects.toMatchObject({
+          name: "ExitError",
+          code: 1,
+        });
         messages.forEach(expectErrorIncludes);
         for (const text of excludes) {
           expect(getMockCallOutput(mockError)).not.toContain(text);
         }
         expect(mockLog).not.toHaveBeenCalled();
+        expect(mockWriteConfigFile).not.toHaveBeenCalled();
       },
     );
 

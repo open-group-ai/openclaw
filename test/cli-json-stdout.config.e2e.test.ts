@@ -280,3 +280,86 @@ it("keeps `config validate --json` stdout parseable at debug log level", async (
     expect(result.stdout).not.toContain("possibly sensitive key found");
   });
 });
+
+it("accepts a valid config for human `config validate` without touching files", async () => {
+  await withCliHome(async (tempHome) => {
+    const configPath = path.join(tempHome, "openclaw.json");
+    const stateDir = path.join(tempHome, "state");
+    const config = '{}\n';
+    await fs.writeFile(configPath, config, "utf8");
+
+    const result = runBuiltCli(tempHome, ["config", "validate"], {
+      OPENCLAW_CONFIG_PATH: configPath,
+      OPENCLAW_STATE_DIR: stateDir,
+    });
+
+    expect(result.error, result.stderr).toBeUndefined();
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain("Config valid:");
+    expect(await fs.readFile(configPath, "utf8")).toBe(config);
+    await expectMissing(path.join(stateDir, "state", "openclaw.sqlite"));
+  });
+});
+
+it("reports an invalid config for human `config validate` without leaking secrets", async () => {
+  await withCliHome(async (tempHome) => {
+    const configPath = path.join(tempHome, "openclaw.json");
+    const stateDir = path.join(tempHome, "state");
+    const secret = randomBytes(16).toString("hex");
+    const config = `${JSON.stringify({
+      gateway: { port: "not-a-port" },
+      channels: { discord: { token: secret } },
+    })}\n`;
+    await fs.writeFile(configPath, config, "utf8");
+
+    const result = runBuiltCli(tempHome, ["config", "validate"], {
+      OPENCLAW_CONFIG_PATH: configPath,
+      OPENCLAW_STATE_DIR: stateDir,
+    });
+
+    expect(result.error, result.stderr).toBeUndefined();
+    expect(result.status, result.stderr).toBe(1);
+    expect(result.stderr).toContain("gateway.port");
+    expect(result.stderr).toContain("expected number");
+    expect(`${result.stdout}\n${result.stderr}`).not.toContain(secret);
+    expect(await fs.readFile(configPath, "utf8")).toBe(config);
+    await expectMissing(path.join(stateDir, "state", "openclaw.sqlite"));
+  });
+});
+
+it("reports a missing config for human `config validate` without creating state", async () => {
+  await withCliHome(async (tempHome) => {
+    const configPath = path.join(tempHome, "openclaw.json");
+    const stateDir = path.join(tempHome, "state");
+
+    const result = runBuiltCli(tempHome, ["config", "validate"], {
+      OPENCLAW_CONFIG_PATH: configPath,
+      OPENCLAW_STATE_DIR: stateDir,
+    });
+
+    expect(result.error, result.stderr).toBeUndefined();
+    expect(result.status, result.stderr).toBe(1);
+    expect(result.stderr).toContain("Config file not found:");
+    expect(result.stderr).toContain(configPath);
+    await expectMissing(configPath, path.join(stateDir, "state", "openclaw.sqlite"));
+  });
+});
+
+it("reports an unreadable config for human `config validate` without creating state", async () => {
+  await withCliHome(async (tempHome) => {
+    const configPath = path.join(tempHome, "openclaw.json");
+    await fs.mkdir(configPath);
+    const stateDir = path.join(tempHome, "state");
+
+    const result = runBuiltCli(tempHome, ["config", "validate"], {
+      OPENCLAW_CONFIG_PATH: configPath,
+      OPENCLAW_STATE_DIR: stateDir,
+    });
+
+    expect(result.error, result.stderr).toBeUndefined();
+    expect(result.status, result.stderr).toBe(1);
+    expect(result.stderr).toContain("read failed at");
+    expect(result.stderr).toContain("Resolve the read error");
+    await expectMissing(path.join(stateDir, "state", "openclaw.sqlite"));
+  });
+});
