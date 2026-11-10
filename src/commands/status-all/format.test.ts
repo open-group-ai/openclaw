@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { registerSecretValueForRedaction } from "../../logging/secret-redaction-registry.js";
+import { resetSecretRedactionRegistryForTest } from "../../logging/secret-redaction-registry.test-support.js";
 import { baseStatusOverviewSurface, getStatusOverviewRowValue } from "../status.test-support.ts";
 import { createMacosAppInstallOwner } from "../test-runtime-config-helpers.js";
 import {
@@ -32,6 +34,36 @@ describe("status-all format", () => {
       ["ordinary status message", "ordinary status message"],
     ] as const) {
       expect(redactStatusSecrets(input)).toBe(expected);
+    }
+  });
+
+  it("redacts registered configured secret values appearing bare in diagnostics", () => {
+    const gatewayToken = "synthetic-gateway-token-9X7Q2mZ4";
+    const modelApiKey = "synthetic-model-apikey-5T8W3kP6";
+    const gatewayPassword = "synthetic-gateway-password-2H6N9vR4";
+    try {
+      registerSecretValueForRedaction(gatewayToken);
+      registerSecretValueForRedaction(modelApiKey);
+      registerSecretValueForRedaction(gatewayPassword);
+      for (const line of [
+        `Gateway connection details: ${gatewayToken} reachable`,
+        `Auth check failed for provider with ${modelApiKey} (retry)`,
+        `Gateway log error: login failed for operator ${gatewayPassword} expired`,
+        "Gateway reachable in 12ms · auth token present",
+      ]) {
+        const redacted = redactStatusSecrets(line);
+        expect(redacted).not.toContain(gatewayToken);
+        expect(redacted).not.toContain(modelApiKey);
+        expect(redacted).not.toContain(gatewayPassword);
+      }
+      expect(
+        redactStatusSecrets(`Gateway connection details: ${gatewayToken} reachable`),
+      ).toContain("Gateway connection details:");
+      expect(redactStatusSecrets("Gateway reachable in 12ms · auth token present")).toBe(
+        "Gateway reachable in 12ms · auth token present",
+      );
+    } finally {
+      resetSecretRedactionRegistryForTest();
     }
   });
 
