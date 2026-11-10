@@ -249,6 +249,24 @@ Use `openclaw skills check --agent <id>` to inspect the missing requirements.
   agent's main queue; a shared global queue is counted once. `--agent` selects
   credentials only for `--usage`.
 
+## Models
+
+`openclaw status` prints a **Models** section with the default model
+(`agents.defaults.model.primary`) and the configured aliases
+(`agents.defaults.models`, rendered as `alias -> provider/model`):
+
+```text
+Models
+Default: openai/gpt-5.4
+gpt -> openai/gpt-5.4
+sonnet -> anthropic/claude-sonnet-5
+```
+
+With no aliases configured, the section shows `Aliases: none configured`.
+`status --json` exposes the same data additively as
+`models: { default, aliases: [{ alias, model }] }`. Only alias names and
+provider/model identifiers are shown; no credentials are printed.
+
 ## Usage and quota
 
 - `--usage` prints normalized provider usage windows as `X% left`.
