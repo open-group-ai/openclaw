@@ -202,7 +202,7 @@ it.each([undefined, "   "])("does not read media without a session: %j", async (
 });
 
 
-it("renders the latest retained-input page in a stable, bounded summary", async () => {
+it("omits the interrupted-inputs snapshot when the latest retained-input page is empty", async () => {
   const read = vi.spyOn(pendingInputs, "listSessionPendingInputs");
   const input = {
     ...params,
@@ -210,9 +210,20 @@ it("renders the latest retained-input page in a stable, bounded summary", async 
     sessionTarget: { sessionId: "session", sessionKey: "agent:main:session" },
   };
   read.mockResolvedValue({ items: [], total: 0 });
-  expect(await buildRuntimeFactsContext(input)).toContainEqual(
+  const texts = (await buildRuntimeFactsContext(input)).map((fragment) => fragment.text);
+  expect(texts.some((text) => text.startsWith("## Interrupted inputs"))).toBe(false);
+  expect(await buildRuntimeFactsContext({ ...input, includeEmptySnapshots: true })).toContainEqual(
     fact("## Interrupted inputs\nnone in the latest retained-input page"),
   );
+});
+
+it("renders the latest retained-input page in a stable, bounded summary", async () => {
+  const read = vi.spyOn(pendingInputs, "listSessionPendingInputs");
+  const input = {
+    ...params,
+    executionHost: false,
+    sessionTarget: { sessionId: "session", sessionKey: "agent:main:session" },
+  };
   read.mockResolvedValue({
     total: 2,
     items: [
@@ -220,8 +231,14 @@ it("renders the latest retained-input page in a stable, bounded summary", async 
       { id: "a", runId: "a", acceptedAt: 1, state: "interrupted", message: { role: "user", content: "first", timestamp: 1 } },
     ],
   });
-  expect(await buildRuntimeFactsContext(input)).toContainEqual(
-    fact('## Interrupted inputs\n- interrupted: "first"\n- interrupted: "second"'),
-  );
+  for (const snapshot of [undefined, true]) {
+    expect(
+      await buildRuntimeFactsContext(
+        snapshot === undefined ? input : { ...input, includeEmptySnapshots: snapshot },
+      ),
+    ).toContainEqual(
+      fact('## Interrupted inputs\n- interrupted: "first"\n- interrupted: "second"'),
+    );
+  }
   expect(read).toHaveBeenLastCalledWith(expect.anything(), { limit: 10 });
 });
