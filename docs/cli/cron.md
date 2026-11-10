@@ -560,12 +560,14 @@ openclaw automations scratch <job-id> --json           # scratch plus revision m
 openclaw automations scratch <job-id> --set "text"     # replace scratch with exact text
 openclaw automations scratch <job-id> --file notes.md  # replace scratch from a file (- for stdin)
 openclaw automations scratch <job-id> --unset          # remove the scratch row
+openclaw automations scratch <job-id> --clear          # empty the scratch content
 ```
 
 Scratch is stored in the shared state database, capped at 256 KiB, and never included in `automations list`/`automations get`/`automations runs` output. Writes are compare-and-swap guarded against the revision read at command start. Pass `--expected-revision <n>` to pin an explicit revision instead. Present scratch becomes bounded model prompt context, so do not store secrets in it. See [Job scratch and quiet results](/automation/cron-jobs/payloads#job-scratch-and-quiet-results) for self-scoped scratch and result actions.
 
 For a job with `--skip-if-scratch-empty`, blank text, comments, headings, fence
-markers, and empty checklist stubs skip the run. `--unset` removes scratch;
+markers, and empty checklist stubs skip the run. `--clear` empties scratch, which
+still counts as explicitly empty and skips the run. `--unset` removes scratch;
 missing scratch still runs. Use `automations disable <job-id>` to stop the job
 regardless of scratch content.
 

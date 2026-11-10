@@ -511,6 +511,41 @@ describe("cron scratch", () => {
     callGatewayFromCli.mockRejectedValue(new Error("unknown job id"));
     await reject(["scratch", "missing", "--get"], "unknown job id", ["cron.scratch.get"]);
   });
+
+  it("prints nothing for --get with empty scratch", async () => {
+    const stdout = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    callGatewayFromCli.mockResolvedValue({ ...current, scratch: null });
+    await runScratch(["--get"]);
+    expect(stdout).not.toHaveBeenCalled();
+    expectRpc(["get", {}]);
+  });
+
+  it("empties scratch with --clear using the read revision and prints JSON", async () => {
+    const stdout = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const json = vi.spyOn(defaultRuntime, "writeJson").mockImplementation(() => {});
+    await runScratch(["--clear"]);
+    expect(json).toHaveBeenCalledExactlyOnceWith(result);
+    expect(stdout).not.toHaveBeenCalled();
+    expectRpc(["get", {}], ["set", { content: "", expectedRevision: 2 }]);
+  });
+
+  it("reports an unknown job on --clear", async () => {
+    callGatewayFromCli.mockRejectedValue(new Error("unknown job id"));
+    await reject(["scratch", "missing", "--clear"], "unknown job id", ["cron.scratch.get"]);
+  });
+
+  it("rejects --get with --clear", async () => {
+    await reject(["scratch", "job-1", "--get", "--clear"], "--get cannot be combined");
+  });
+
+  it.each([
+    [["--set", "x", "--clear"]],
+    [["--clear", "--unset"]],
+    [["--clear", "--file", "notes.md"]],
+  ])("rejects --clear combined with another write: %s", async (args) => {
+    await reject(["scratch", "job-1", ...args], "choose only one of");
+  });
+
   it.each`
     name                                         | args                                                                                  | message                                                      | calls                                                 | reply                                 | offline
     ${"non-decimal revision"}                    | ${["--set", "x", "--expected-revision", "0x2"]}                                       | ${"--expected-revision must be a non-negative integer"}      | ${[["get", {}]]}                                      | ${undefined}                          | ${false}
@@ -545,6 +580,7 @@ describe("cron scratch", () => {
   it.each([
     ["0", ["--set", "x"], "x"],
     ["42", ["--unset", "--json"], null],
+    ["7", ["--clear"], ""],
   ] as const)("writes at explicit revision %s without a read", async (revision, args, content) => {
     await runScratch([...args, "--expected-revision", revision]);
     expectRpc(["set", { content, expectedRevision: Number(revision) }]);

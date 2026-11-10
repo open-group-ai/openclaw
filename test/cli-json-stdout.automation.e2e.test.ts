@@ -40,7 +40,15 @@ describe("cli json stdout contract", () => {
       tty: true,
     }),
     cliCase("cron scratch job-1 --set updated --unset", {
-      message: "choose only one of --set, --file, or --unset",
+      message: "choose only one of --set, --file, --unset, or --clear",
+      tty: true,
+    }),
+    cliCase("cron scratch job-1 --set updated --clear", {
+      message: "choose only one of --set, --file, --unset, or --clear",
+      tty: true,
+    }),
+    cliCase("cron scratch job-1 --get --clear", {
+      message: "--get cannot be combined with --set, --file, --unset, or --clear",
       tty: true,
     }),
     cliCase("cron edit job-1 --enable --disable --json", {
