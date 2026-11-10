@@ -64,8 +64,38 @@ describe("config model validation", () => {
     expect(result).toEqual({
       refsChecked: 0,
       refsTotal: 1,
-      errors: ["Unable to validate changed model references before writing: catalog unavailable"],
+      errors: [
+        "Unable to validate changed model references before writing at agents.defaults.model.primary: catalog unavailable",
+      ],
     });
+  });
+
+  it("reports the invalid key without exposing a secret-bearing value", async () => {
+    const secretValue = "sk-test-secret-bearing-invalid-value-987654321"; // pragma: allowlist secret
+    const result = await checkTouchedTextModelRefs({
+      config: modelConfig({ primary: secretValue }),
+      touchedPaths: [["agents", "defaults", "model", "primary"]],
+      createModelRefResolver: async () => {
+        throw new Error("catalog unavailable");
+      },
+    });
+
+    expect(result.refsTotal).toBe(1);
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0]).toContain("agents.defaults.model.primary");
+    expect(result.errors[0]).toContain("catalog unavailable");
+    expect(result.errors.join("\n")).not.toContain(secretValue);
+  });
+
+  it("leaves valid configurations unchanged", async () => {
+    const result = await checkTouchedTextModelRefs({
+      config: modelConfig({ primary: "openai/gpt-5.4-mini" }),
+      touchedPaths: [["agents", "defaults", "model", "primary"]],
+      resolveModelRef,
+    });
+
+    expect(result).toEqual({ refsChecked: 1, refsTotal: 1, errors: [] });
+    expect(resolveModelRef).toHaveBeenCalledOnce();
   });
 
   it("collects every unresolved ref in a multi-reference update", async () => {

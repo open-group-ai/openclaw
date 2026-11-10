@@ -341,6 +341,26 @@ function expandInheritedDefaultRefs(
   return dedupeByKey(expanded, (ref) => `${ref.path}\u0000${ref.agentId ?? ""}`);
 }
 
+/**
+ * Format touched config paths (keys only, never values) for validation diagnostics.
+ * Returns null when no key is available so callers keep the generic message.
+ */
+function formatTouchedModelRefKeys(touchedPaths: readonly (readonly string[])[]): string | null {
+  const seen = new Set<string>();
+  for (const path of touchedPaths) {
+    const key = path.join(".");
+    if (key) {
+      seen.add(key);
+    }
+  }
+  if (seen.size === 0) {
+    return null;
+  }
+  const keys = [...seen].slice(0, 5);
+  const remaining = seen.size - keys.length;
+  return remaining > 0 ? `${keys.join(", ")} and ${remaining} more` : keys.join(", ");
+}
+
 async function createRuntimeModelRefResolver(): Promise<ConfigModelRefResolver> {
   const modelSelection = await import("../agents/model-selection.js");
   const loadModelModules = () =>
@@ -473,10 +493,15 @@ export async function checkTouchedTextModelRefs(params: {
       : undefined;
   } catch (cause) {
     const detail = coerceErrorMessage(cause);
+    const keys = formatTouchedModelRefKeys(touchedPaths);
     return {
       refsChecked: 0,
       refsTotal: authoredRefs.length,
-      errors: [`Unable to validate changed model references before writing: ${detail}`],
+      errors: [
+        keys
+          ? `Unable to validate changed model references before writing at ${keys}: ${detail}`
+          : `Unable to validate changed model references before writing: ${detail}`,
+      ],
     };
   }
   const validationRefsByPath = new Map(
@@ -623,12 +648,15 @@ export async function checkTouchedTextModelRefs(params: {
         Boolean(params.redactDependencyValues && refs.some((ref) => ref.dependency))
           ? "model resolver setup failed"
           : coerceErrorMessage(cause);
+      const keys = formatTouchedModelRefKeys(touchedPaths);
       return {
         refsChecked: syntaxFailures.length,
         refsTotal: refs.length,
         errors: [
           ...errors,
-          `Unable to validate changed model references before writing: ${detail}`,
+          keys
+            ? `Unable to validate changed model references before writing at ${keys}: ${detail}`
+            : `Unable to validate changed model references before writing: ${detail}`,
         ],
       };
     }
