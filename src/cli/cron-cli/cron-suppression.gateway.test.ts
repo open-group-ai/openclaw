@@ -337,8 +337,14 @@ describe("cron CLI delivery suppression readback", () => {
               jobs: Array<{ deliverySuppressionReason?: string }>;
             };
             expect(compact.jobs[0]?.deliverySuppressionReason).toBe(reason);
-            const listJson = (await runCli(["list", "--json"])).json as { jobs: CronJob[] };
-            expect(listJson.jobs[0]?.state.deliverySuppressionReason).toBe(reason);
+            // `list --json` is the privacy-preserving summary array; suppression
+            // detail stays on `get --json`, compact gateway rows, and human views.
+            const listJson = (await runCli(["list", "--json"])).json as Array<{
+              id: string;
+              hasScratch: boolean;
+            }>;
+            expect(listJson[0]?.id).toBe(job.id);
+            expect(listJson[0]).not.toHaveProperty("state");
             const list = await runCli(["list"]);
             const show = await runCli(["show", job.id]);
             if (isRich()) {

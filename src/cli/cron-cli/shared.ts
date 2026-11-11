@@ -237,6 +237,72 @@ export function enrichCronJsonWithStatus(value: unknown): unknown {
   return value;
 }
 
+/**
+ * Stable machine-readable row for `automations list --json`.
+ * Only store-exposed summary fields; payloads, delivery routes, and scratch
+ * contents stay out so scripts never scrape tables or secrets.
+ * Timestamps are ISO-8601 UTC (`null` when unknown).
+ */
+export type AutomationListJsonEntry = {
+  id: string;
+  name: string | null;
+  schedule: CronSchedule | null;
+  enabled: boolean;
+  lastRunAt: string | null;
+  nextRunAt: string | null;
+  hasScratch: boolean;
+};
+
+function toIsoUtcOrNull(value: unknown): string | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return null;
+  }
+  return timestampMsToIsoString(value) ?? null;
+}
+
+// The list inventory does not embed scratch; report presence only when the
+// Gateway includes a scratch marker on the row, without ever emitting content.
+function hasAutomationScratch(job: unknown): boolean {
+  if (!job || typeof job !== "object") {
+    return false;
+  }
+  const record = job as Record<string, unknown>;
+  if (typeof record.hasScratch === "boolean") {
+    return record.hasScratch;
+  }
+  const scratch = record.scratch;
+  if (scratch === null || scratch === undefined) {
+    return false;
+  }
+  if (typeof scratch === "string") {
+    return true;
+  }
+  if (typeof scratch === "object") {
+    return (scratch as Record<string, unknown>).content !== undefined
+      ? (scratch as Record<string, unknown>).content !== null
+      : true;
+  }
+  return true;
+}
+
+export function toAutomationListJson(jobs: readonly CronJob[]): AutomationListJsonEntry[] {
+  return jobs.map((job) => {
+    const record = job as unknown as Record<string, unknown>;
+    const state = (record.state ?? {}) as Record<string, unknown>;
+    const lastMs = state.lastRunAtMs ?? record.lastRunAtMs;
+    const nextMs = state.nextRunAtMs ?? record.nextRunAtMs;
+    return {
+      id: job.id,
+      name: typeof job.name === "string" ? job.name : null,
+      schedule: (job.schedule ?? null) as CronSchedule | null,
+      enabled: job.enabled,
+      lastRunAt: toIsoUtcOrNull(lastMs),
+      nextRunAt: toIsoUtcOrNull(nextMs),
+      hasScratch: hasAutomationScratch(job),
+    };
+  });
+}
+
 function computeStatus(job: { enabled?: unknown; state?: unknown }): string {
   const state = asOptionalRecord(job.state) ?? {};
   if (state.runningAtMs) {
