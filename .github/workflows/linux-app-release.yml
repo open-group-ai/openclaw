@@ -716,7 +716,7 @@ jobs:
     name: Build Windows installer
     if: ${{ needs.validate_release.outputs.already_published != 'true' && needs.validate_release.outputs.windows_build == 'true' }}
     needs: validate_release
-    runs-on: windows-2022
+    runs-on: [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
     timeout-minutes: 45
     permissions:
       contents: read
@@ -781,7 +781,7 @@ jobs:
     name: Authenticode-sign Windows installer
     needs: [validate_release, build_windows]
     if: ${{ vars.OPENCLAW_RELEASE_WINDOWS_SIGNED == 'true' && needs.build_windows.result == 'success' }}
-    runs-on: windows-2025
+    runs-on: [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
     timeout-minutes: 15
     environment: release-signing
     permissions:
