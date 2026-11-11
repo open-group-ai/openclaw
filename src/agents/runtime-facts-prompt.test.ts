@@ -220,8 +220,46 @@ it("renders the latest retained-input page in a stable, bounded summary", async 
       { id: "a", runId: "a", acceptedAt: 1, state: "interrupted", message: { role: "user", content: "first", timestamp: 1 } },
     ],
   });
-  expect(await buildRuntimeFactsContext(input)).toContainEqual(
+  const nonEmpty = await buildRuntimeFactsContext(input);
+  expect(nonEmpty).toContainEqual(
     fact('## Interrupted inputs\n- interrupted: "first"\n- interrupted: "second"'),
   );
+  const nonEmptyText = nonEmpty.find((fragment) =>
+    fragment.text.startsWith("## Interrupted inputs"),
+  )?.text;
+  expect(nonEmptyText).not.toContain("none in the latest retained-input page");
   expect(read).toHaveBeenLastCalledWith(expect.anything(), { limit: 10 });
+});
+
+it("a later empty retained-input page supersedes an earlier non-empty one", async () => {
+  const { supersedeRuntimeContextSnapshots } = await import("./internal-runtime-context.js");
+  const read = vi.spyOn(pendingInputs, "listSessionPendingInputs");
+  const input = {
+    ...params,
+    executionHost: false,
+    sessionTarget: { sessionId: "session", sessionKey: "agent:main:session" },
+  };
+  read.mockResolvedValue({
+    total: 1,
+    items: [
+      { id: "a", runId: "a", acceptedAt: 1, state: "interrupted", message: { role: "user", content: "stale", timestamp: 1 } },
+    ],
+  });
+  const nonEmpty = (await buildRuntimeFactsContext(input)).find((fragment) =>
+    fragment.text.startsWith("## Interrupted inputs"),
+  );
+  read.mockResolvedValue({ items: [], total: 0 });
+  const empty = (await buildRuntimeFactsContext(input)).find((fragment) =>
+    fragment.text.startsWith("## Interrupted inputs"),
+  );
+  expect(empty?.text).toBe("## Interrupted inputs\nnone in the latest retained-input page");
+  // Production tags the snapshot family from the section heading (see attempt-prompt-build).
+  const tag = (fragment: { kind: "conversation-data"; text: string }) => ({
+    ...fragment,
+    snapshotFamily: fragment.text.split("\n", 1)[0],
+  });
+  const result = supersedeRuntimeContextSnapshots([tag(nonEmpty!), tag(empty!)]);
+  expect(result).toEqual([tag(empty!)]);
+  expect(result.at(0)?.text).toBe("## Interrupted inputs\nnone in the latest retained-input page");
+  expect(result.at(0)?.text).not.toContain("stale");
 });

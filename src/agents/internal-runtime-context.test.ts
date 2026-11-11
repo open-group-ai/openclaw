@@ -235,7 +235,10 @@ it("replaces snapshots by family, including an explicit empty snapshot", async (
   const snapshot = (snapshotFamily: string, text: string) =>
     ({ kind: "conversation-data" as const, snapshotFamily, text });
   const old = snapshot("interrupted", "## Interrupted inputs\n- old");
-  const empty = snapshot("interrupted", "## Interrupted inputs\nnone");
+  const empty = snapshot(
+    "interrupted",
+    "## Interrupted inputs\nnone in the latest retained-input page",
+  );
   const date = snapshot("temporal", "## Temporal Context\ntoday");
   const newerDate = snapshot("temporal", "## Temporal Context\ntomorrow");
   const ordinary = { kind: "conversation-data" as const, text: "other" };
