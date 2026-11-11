@@ -191,6 +191,39 @@ describe("statusJsonCommand", () => {
     });
   });
 
+  it("includes configured model aliases and the default model in JSON", async () => {
+    mocks.scanStatusJsonFast.mockResolvedValueOnce({
+      ...createScanResult(),
+      cfg: {
+        update: { channel: "stable" },
+        agents: {
+          defaults: {
+            model: { primary: "openai/gpt-5.4", fallbacks: ["openai/gpt-5.4"] },
+            models: {
+              "anthropic/claude-sonnet-5": { alias: "sonnet" },
+              "openai/gpt-5.4": { alias: "gpt" },
+            },
+          },
+        },
+      },
+    });
+
+    const payload = JSON.parse(await runJson());
+    expect(payload.models).toEqual({
+      default: "openai/gpt-5.4",
+      aliases: [
+        { alias: "gpt", model: "openai/gpt-5.4" },
+        { alias: "sonnet", model: "anthropic/claude-sonnet-5" },
+      ],
+    });
+  });
+
+  it("reports empty model aliases without secrets in JSON", async () => {
+    const payload = JSON.parse(await runJson());
+    expect(payload.models).toEqual({ default: null, aliases: [] });
+    expect(JSON.stringify(payload.models)).not.toMatch(/password|secret|api-key|token/);
+  });
+
   it("reports deep gateway probe failures and runs the documented security audit", async () => {
     mocks.scanStatusJsonFast.mockResolvedValueOnce({
       ...createScanResult(),
