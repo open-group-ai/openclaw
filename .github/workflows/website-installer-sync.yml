@@ -422,7 +422,7 @@ jobs:
   windows-installer:
     needs: scope
     if: ${{ !cancelled() && needs.scope.result == 'success' && needs.scope.outputs.windows == 'true' }}
-    runs-on: windows-latest
+    runs-on: [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
