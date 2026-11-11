@@ -64,7 +64,7 @@ concurrency:
 jobs:
   darwin:
     if: ${{ github.event.pull_request.draft == false }}
-    runs-on: macos-15
+    runs-on: [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
     timeout-minutes: 20
     defaults:
       run:
