@@ -39,7 +39,7 @@ concurrency:
 jobs:
   dispatch:
     name: Dispatch selected Mantis workflow
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
     steps:
       - name: Dispatch scenario
         env:

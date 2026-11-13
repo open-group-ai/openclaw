@@ -57,9 +57,7 @@ env:
 jobs:
   admit:
     name: Validate artifact producer request
-    runs-on: &linux_runner_ubuntu >-
-      ${{ vars.OPENCLAW_RELEASE_RUNNER_GROUP != '' && fromJSON(format('{{"group":{0},"labels":{1}}}',
-      toJSON(vars.OPENCLAW_RELEASE_RUNNER_GROUP), toJSON('ubuntu-24.04'))) || ('ubuntu-24.04') }}
+    runs-on: &linux_runner_ubuntu [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
     timeout-minutes: 5
     outputs:
       request_sha256: ${{ steps.request.outputs.request_sha256 }}

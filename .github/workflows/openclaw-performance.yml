@@ -100,12 +100,7 @@ jobs:
   resolve_target:
     name: Resolve target ref
     if: ${{ (github.event_name != 'schedule' || github.repository == 'openclaw/openclaw') && (github.event_name == 'schedule' || inputs.mode != 'vitest-pair') }}
-    runs-on: &linux_runner_ubuntu >-
-      ${{ (github.event_name == 'workflow_dispatch' && startsWith(inputs.dispatch_id,
-      'full-release-validation-') && vars.OPENCLAW_RELEASE_RUNNER_GROUP || '') != '' &&
-      fromJSON(format('{{"group":{0},"labels":{1}}}', toJSON((github.event_name == 'workflow_dispatch' &&
-      startsWith(inputs.dispatch_id, 'full-release-validation-') && vars.OPENCLAW_RELEASE_RUNNER_GROUP ||
-      '')), toJSON('ubuntu-24.04'))) || ('ubuntu-24.04') }}
+    runs-on: &linux_runner_ubuntu [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
     timeout-minutes: 10
     outputs:
       checkout_ref: ${{ steps.resolve.outputs.checkout_ref }}
@@ -270,14 +265,7 @@ jobs:
     if: ${{ github.event_name == 'schedule' || (inputs.mode != 'vitest-pair' && inputs.mode != 'gateway-concurrency') }}
     permissions:
       contents: read
-    runs-on: &linux_runner_large >-
-      ${{ (github.event_name == 'workflow_dispatch' && startsWith(inputs.dispatch_id,
-      'full-release-validation-') && vars.OPENCLAW_RELEASE_RUNNER_GROUP || '') != '' &&
-      fromJSON(format('{{"group":{0},"labels":{1}}}', toJSON((github.event_name == 'workflow_dispatch' &&
-      startsWith(inputs.dispatch_id, 'full-release-validation-') && vars.OPENCLAW_RELEASE_RUNNER_GROUP ||
-      '')), toJSON(vars.OPENCLAW_CI_RUNNER_BACKEND == 'github' && 'ubuntu-24.04' ||
-      'blacksmith-16vcpu-ubuntu-2404'))) || (vars.OPENCLAW_CI_RUNNER_BACKEND == 'github' && 'ubuntu-24.04'
-      || 'blacksmith-16vcpu-ubuntu-2404') }}
+    runs-on: &linux_runner_large [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
     timeout-minutes: 240
     strategy:
       fail-fast: false

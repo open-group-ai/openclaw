@@ -55,7 +55,7 @@ concurrency:
 jobs:
   validate_recovery:
     if: ${{ !inputs.advisory }}
-    runs-on: ${{ inputs.runner_group != '' && fromJSON(format('{{"group":{0},"labels":{1}}}', toJSON(inputs.runner_group), toJSON('ubuntu-24.04'))) || ('ubuntu-24.04') }}
+    runs-on: [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
     permissions: {}
     steps:
       - name: Require a main-branch recovery dispatch

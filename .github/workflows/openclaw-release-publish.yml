@@ -128,7 +128,7 @@ env:
 jobs:
   resolve_release_target:
     name: Resolve release target
-    runs-on: ${{ vars.OPENCLAW_RELEASE_RUNNER_GROUP != '' && fromJSON(format('{{"group":{0},"labels":{1}}}', toJSON(vars.OPENCLAW_RELEASE_RUNNER_GROUP), toJSON('ubuntu-latest'))) || ('ubuntu-latest') }}
+    runs-on: [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
     timeout-minutes: 20
     outputs:
       sha: ${{ steps.manifest.outputs.sha || steps.signed_tag.outputs.sha }}
@@ -1036,7 +1036,7 @@ jobs:
   record_docker_only_scope:
     needs: resolve_release_target
     if: inputs.publish_docker_only
-    runs-on: ${{ vars.OPENCLAW_RELEASE_RUNNER_GROUP != '' && fromJSON(format('{{"group":{0},"labels":{1}}}', toJSON(vars.OPENCLAW_RELEASE_RUNNER_GROUP), toJSON('ubuntu-latest'))) || ('ubuntu-latest') }}
+    runs-on: [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
     permissions:
       contents: read
     steps:
@@ -1076,7 +1076,7 @@ jobs:
     permissions:
       actions: write
       contents: read
-    runs-on: ${{ vars.OPENCLAW_RELEASE_RUNNER_GROUP != '' && fromJSON(format('{{"group":{0},"labels":{1}}}', toJSON(vars.OPENCLAW_RELEASE_RUNNER_GROUP), toJSON('ubuntu-latest'))) || ('ubuntu-latest') }}
+    runs-on: [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
     timeout-minutes: 360
     outputs:
       qualified: ${{ steps.proof.outputs.qualified }}
@@ -2233,7 +2233,7 @@ jobs:
     name: Verify already-published core npm package
     needs: [resolve_release_target]
     if: ${{ inputs.publish_docker_only }}
-    runs-on: ${{ vars.OPENCLAW_RELEASE_RUNNER_GROUP != '' && fromJSON(format('{{"group":{0},"labels":{1}}}', toJSON(vars.OPENCLAW_RELEASE_RUNNER_GROUP), toJSON('ubuntu-latest'))) || ('ubuntu-latest') }}
+    runs-on: [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
     permissions:
       contents: read
     steps:
@@ -2342,7 +2342,7 @@ jobs:
     # Prepared releases become visible in the outer button workflow only after
     # this parent reaches an allowed terminal state and ClawHub is verified.
     if: ${{ always() && inputs.prepared_plugins == '' && inputs.publish_openclaw_npm && needs.publish.result == 'success' && needs.publish_docker.result == 'success' && (needs.approve_github_release.result == 'success' || (inputs.finalize_release_before_docker && needs.finalize_github_release_before_docker.result == 'success')) }}
-    runs-on: ${{ vars.OPENCLAW_RELEASE_RUNNER_GROUP != '' && fromJSON(format('{{"group":{0},"labels":{1}}}', toJSON(vars.OPENCLAW_RELEASE_RUNNER_GROUP), toJSON('ubuntu-latest'))) || ('ubuntu-latest') }}
+    runs-on: [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
     concurrency:
       group: linux-app-release-publish
       cancel-in-progress: false
@@ -2453,7 +2453,7 @@ jobs:
     name: Activate GitHub release before Docker
     needs: [publish, approve_github_release_before_docker]
     if: ${{ inputs.finalize_release_before_docker && needs.publish.result == 'success' && needs.approve_github_release_before_docker.result == 'success' }}
-    runs-on: ${{ vars.OPENCLAW_RELEASE_RUNNER_GROUP != '' && fromJSON(format('{{"group":{0},"labels":{1}}}', toJSON(vars.OPENCLAW_RELEASE_RUNNER_GROUP), toJSON('ubuntu-latest'))) || ('ubuntu-latest') }}
+    runs-on: [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
     concurrency:
       group: linux-app-release-publish
       cancel-in-progress: false
@@ -2469,7 +2469,7 @@ jobs:
     if: ${{ !cancelled() && needs.finalize_github_release.result == 'success' && inputs.npm_dist_tag == 'latest' && !contains(inputs.tag, '-beta.') }}
     # Dispatch only; the child owns the shared metadata queue and its outcome.
     continue-on-error: true
-    runs-on: ${{ vars.OPENCLAW_RELEASE_RUNNER_GROUP != '' && fromJSON(format('{{"group":{0},"labels":{1}}}', toJSON(vars.OPENCLAW_RELEASE_RUNNER_GROUP), toJSON('ubuntu-latest'))) || ('ubuntu-latest') }}
+    runs-on: [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
     timeout-minutes: 5
     permissions:
       actions: write
@@ -2586,7 +2586,7 @@ jobs:
     # App failures are reported by their own workflow; neither npm nor the
     # published GitHub release depends on native asset availability.
     continue-on-error: true
-    runs-on: ${{ vars.OPENCLAW_RELEASE_RUNNER_GROUP != '' && fromJSON(format('{{"group":{0},"labels":{1}}}', toJSON(vars.OPENCLAW_RELEASE_RUNNER_GROUP), toJSON('ubuntu-latest'))) || ('ubuntu-latest') }}
+    runs-on: [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
     timeout-minutes: 10
     permissions:
       actions: write
@@ -2645,7 +2645,7 @@ jobs:
     needs:
       [publish, publish_android, publish_vcr, dispatch_linux_mirror, publish_linux, publish_windows]
     if: ${{ failure() || cancelled() }}
-    runs-on: ${{ vars.OPENCLAW_RELEASE_RUNNER_GROUP != '' && fromJSON(format('{{"group":{0},"labels":{1}}}', toJSON(vars.OPENCLAW_RELEASE_RUNNER_GROUP), toJSON('ubuntu-latest'))) || ('ubuntu-latest') }}
+    runs-on: [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
     timeout-minutes: 5
     permissions:
       actions: write

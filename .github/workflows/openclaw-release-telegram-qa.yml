@@ -63,7 +63,7 @@ env:
 jobs:
   trusted_identity:
     name: Resolve trusted dispatched workflow identity
-    runs-on: &linux_runner_ubuntu ubuntu-24.04
+    runs-on: &linux_runner_ubuntu [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
     timeout-minutes: 5
     permissions:
       contents: read

@@ -121,7 +121,7 @@ jobs:
   run_telegram_proof:
     name: Run request-bound Telegram bot proof
     needs: admit_request
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
     timeout-minutes: 60
     permissions:
       actions: read

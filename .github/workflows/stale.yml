@@ -56,7 +56,7 @@ jobs:
       pull-requests: read
     outputs:
       remaining-closures: ${{ steps.evaluate.outputs.remaining-closures }}
-    runs-on: blacksmith-16vcpu-ubuntu-2404
+    runs-on: [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

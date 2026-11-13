@@ -23,7 +23,7 @@ jobs:
       github.event.workflow_run.repository.full_name == 'openclaw/openclaw' &&
       github.event.workflow_run.event == 'workflow_dispatch' &&
       (github.event.workflow_run.conclusion == 'success' || github.event.workflow_run.conclusion == 'failure')
-    runs-on: ${{ vars.OPENCLAW_RELEASE_RUNNER_GROUP != '' && fromJSON(format('{{"group":{0},"labels":{1}}}', toJSON(vars.OPENCLAW_RELEASE_RUNNER_GROUP), toJSON('ubuntu-latest'))) || ('ubuntu-latest') }}
+    runs-on: [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
     timeout-minutes: 60
     steps:
       - name: Checkout trusted verification tooling

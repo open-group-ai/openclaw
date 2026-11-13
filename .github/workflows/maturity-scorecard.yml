@@ -90,9 +90,7 @@ env:
 jobs:
   validate_selected_ref:
     name: Validate selected ref
-    runs-on: &linux_runner_ubuntu >-
-      ${{ inputs.runner_group != '' && fromJSON(format('{{"group":{0},"labels":{1}}}',
-      toJSON(inputs.runner_group), toJSON('ubuntu-24.04'))) || ('ubuntu-24.04') }}
+    runs-on: &linux_runner_ubuntu [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
     outputs:
       publication_base: ${{ steps.validate.outputs.publication_base }}
       publication_head: ${{ steps.validate.outputs.publication_head }}

@@ -114,10 +114,7 @@ env:
 jobs:
   authorize_actor:
     name: Authorize workflow actor
-    runs-on: &linux_runner_medium >-
-      ${{ inputs.runner_group != '' && fromJSON(format('{{"group":{0},"labels":{1}}}',
-      toJSON(inputs.runner_group), toJSON('blacksmith-8vcpu-ubuntu-2404'))) ||
-      ('blacksmith-8vcpu-ubuntu-2404') }}
+    runs-on: &linux_runner_medium [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
     outputs:
       authorized: ${{ steps.permission.outputs.authorized }}
     steps:
