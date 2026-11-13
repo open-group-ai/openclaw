@@ -64,7 +64,7 @@
       "status": "not_started",
       "verification": ["unit: i18n en/pt/es; section id rules", "integration: clone rules API lists orgs/repos and round-trips sha", "e2e on the Control desktop nsvx hub"],
       "evidence": [],
-      "notes": "Needs My-Clone-AI/clone Rules API first."
+      "notes": "Needs open-group-ai/nsvx-web (Clone) Rules API first."
     },
     {
       "id": "harness-validate-histogram",
