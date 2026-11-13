@@ -406,15 +406,17 @@ jobs:
         run: >-
           node -e "require('node:fs').rmSync('target/release/bundle', { recursive: true, force: true });"
 
+  # Open Group: the fleet has no self-hosted macOS or Windows runner and GitHub-hosted labels are
+  # forbidden, so test-macos and test-windows-power run only from manual dispatch.
   test-macos:
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' || !inputs.windows_only) }}
+    if: ${{ github.event_name == 'workflow_dispatch' && !inputs.windows_only }}
     name: Test macOS companion
     # This app also ships macOS desktop-test bundles, but the only job that
     # compiles them (linux-app-release.yml build_macos) runs behind a manual
     # dispatch input. Without a per-PR check, a macOS-gated Tauri API can break
     # the macOS target for weeks unnoticed - `WebviewWindowBuilder::transparent`
     # did exactly that.
-    runs-on: xcode-27
+    runs-on: [self-hosted, macOS, ARM64]
     timeout-minutes: 30
     env:
       MACOSX_DEPLOYMENT_TARGET: "13.0"
@@ -458,10 +460,9 @@ jobs:
         run: cargo +stable test --locked --all-targets
 
   test-windows-power:
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     name: Test Windows desktop
-    # Match the regular Windows installer build runner.
-    runs-on: [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
+    runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 105
     steps:
       - name: Checkout

@@ -2,7 +2,7 @@ import { expect, it } from "vitest";
 import { evaluateWorkflowRunner as runner, readWorkflow } from "./ci-workflow.test-support.js";
 
 type Job = {
-  "runs-on"?: string;
+  "runs-on"?: string | string[];
   uses?: string;
   with?: Record<string, string>;
   environment?: unknown;
@@ -14,12 +14,12 @@ type Workflow = {
 };
 const workflow = (name: string): Workflow => readWorkflow(`.github/workflows/${name}.yml`);
 const group = 'Release "reserved"';
-const context = {
+// Open Group: release Linux jobs run on the self-hosted super-cluster; reservations no longer route
+// runs-on, but reusable callers still forward runner_group.
+const LINUX_RUNNER = ["self-hosted", "Linux", "X64", "grow-ci", "open-group-super-cluster"];
+const reserved = {
   runnerBackend: "github" as const,
   preflightOutputs: { node_runner_backend: "github" },
-};
-const reserved = {
-  ...context,
   releaseRunnerGroup: group,
   runnerGroup: group,
   dispatchId: "full-release-validation-123-1",
@@ -30,21 +30,11 @@ it.each([
   ["full-release-validation", "resolve_target"],
   ["install-smoke-reusable", "preflight"],
   ["ci", "checks-fast-core"],
-])("routes %s/%s through the reservation without changing its label", (name, job) => {
-  const selector = workflow(name).jobs[job]!["runs-on"];
-  const label = runner(selector, context);
-  expect(label).toMatch(/^ubuntu-/u);
-  expect(runner(selector, reserved)).toEqual({ group, labels: label });
-  if (name === "ci") {
-    for (const eventName of ["pull_request", "workflow_dispatch"] as const) {
-      expect(runner(selector, { ...reserved, eventName, dispatchId: "", releaseGate: true })).toBe(
-        label,
-      );
-    }
-  }
+])("keeps %s/%s on the self-hosted fleet", (name, job) => {
+  expect(workflow(name).jobs[job]!["runs-on"]).toEqual(LINUX_RUNNER);
 });
 
-it("keeps credentialed publishers on GitHub-hosted runners despite a reservation", () => {
+it("keeps credentialed publishers on the self-hosted fleet", () => {
   const publishers = `
     openclaw-release-publish openclaw-release-promote openclaw-npm-release plugin-npm-release
     plugin-clawhub-release plugin-clawhub-new plugin-clawhub-postpublish docker-release
@@ -60,7 +50,7 @@ it("keeps credentialed publishers on GitHub-hosted runners despite a reservation
           job.permissions?.["id-token"] === "write" ||
           /\$\{\{\s*secrets\.(?!GITHUB_TOKEN\b)/u.test(JSON.stringify(job)))
       ) {
-        expect(runner(job["runs-on"], reserved), name).toMatch(/^(?:ubuntu|windows|macos)-/u);
+        expect(job["runs-on"], name).toEqual(LINUX_RUNNER);
       }
     }
   }

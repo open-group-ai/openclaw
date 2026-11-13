@@ -53,9 +53,7 @@ env:
 
 jobs:
   preflight:
-    runs-on: &linux_runner_ubuntu >-
-      ${{ inputs.runner_group != '' && fromJSON(format('{{"group":{0},"labels":{1}}}',
-      toJSON(inputs.runner_group), toJSON('ubuntu-24.04'))) || ('ubuntu-24.04') }}
+    runs-on: &linux_runner_ubuntu [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
     timeout-minutes: 15
     outputs:
       run_bun_global_install_smoke: ${{ steps.manifest.outputs.run_bun_global_install_smoke }}

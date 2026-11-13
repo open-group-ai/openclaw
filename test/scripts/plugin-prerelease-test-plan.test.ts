@@ -19,7 +19,7 @@ import {
   resolvePluginPrereleaseExtensionRuntime,
 } from "../../scripts/lib/plugin-prerelease-test-plan.mts";
 import { useAutoCleanupTempDirTracker } from "../helpers/temp-dir.js";
-import { evaluateWorkflowExpression, evaluateWorkflowRunner } from "./ci-workflow.test-support.js";
+import { evaluateWorkflowExpression } from "./ci-workflow.test-support.js";
 
 const tempDirs = useAutoCleanupTempDirTracker(afterEach);
 
@@ -720,15 +720,11 @@ export const createExtensionTestShards = () => [{
     expect(resolveTargetStep.run).toContain('--expected-sha "$EXPECTED_SHA"');
     expect(targetSummaryStep.run).toContain("- Validation SHA:");
     expect(targetSummaryStep.run).not.toContain("- Code SHA:");
-    expect(evaluateWorkflowRunner(releaseChecksWorkflow.jobs.resolve_target["runs-on"])).toBe(
-      "ubuntu-24.04",
-    );
-    expect(
-      evaluateWorkflowRunner(releaseChecksWorkflow.jobs.prepare_release_package["runs-on"]),
-    ).toBe("ubuntu-24.04");
-    expect(evaluateWorkflowRunner(releaseChecksWorkflow.jobs.summary["runs-on"])).toBe(
-      "ubuntu-24.04",
-    );
+    // Open Group: release Linux jobs run on the self-hosted super-cluster.
+    const linuxRunner = ["self-hosted", "Linux", "X64", "grow-ci", "open-group-super-cluster"];
+    for (const jobName of ["resolve_target", "prepare_release_package", "summary"]) {
+      expect(releaseChecksWorkflow.jobs[jobName]["runs-on"]).toEqual(linuxRunner);
+    }
     for (const jobName of [
       "normal_ci",
       "plugin_prerelease_independent",
@@ -736,9 +732,7 @@ export const createExtensionTestShards = () => [{
       "npm_telegram",
       "summary",
     ]) {
-      expect(evaluateWorkflowRunner(fullReleaseWorkflow.jobs[jobName]["runs-on"])).toBe(
-        "ubuntu-24.04",
-      );
+      expect(fullReleaseWorkflow.jobs[jobName]["runs-on"]).toEqual(linuxRunner);
     }
     expect(fullReleaseWorkflow.jobs.normal_ci["timeout-minutes"]).toBe(15);
     expect(fullReleaseWorkflow.jobs.normal_ci.needs).toEqual([

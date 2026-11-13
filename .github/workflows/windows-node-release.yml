@@ -47,10 +47,12 @@ env:
   RELEASE_PUBLISH_RUN_ATTEMPT: ${{ inputs.release_publish_run_attempt }}
   DIRECT_RELEASE_RECOVERY: ${{ inputs.direct_release_recovery && 'true' || 'false' }}
 
+# Open Group: both jobs need native Windows tooling. This workflow is manual-dispatch only and
+# queues until a self-hosted Windows runner joins the fleet (GitHub-hosted labels are forbidden).
 jobs:
   validate_signed_windows_installers:
     name: Validate signed Windows installers
-    runs-on: [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
+    runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 30
     outputs:
       artifact_id: ${{ steps.verified_assets.outputs.artifact-id }}
@@ -231,7 +233,7 @@ jobs:
       actions: read
       attestations: read
       contents: write
-    runs-on: [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
+    runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 30
     steps:
       - name: Checkout executing Windows tooling

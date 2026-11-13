@@ -902,7 +902,11 @@ describe("prepared Docker publication", () => {
       with?: Record<string, unknown>;
     }[];
     expect(build.strategy.matrix.include).toEqual([
-      { architecture: "amd64", runner: "ubuntu-24.04" },
+      // Open Group: amd64 builds on the self-hosted super-cluster.
+      {
+        architecture: "amd64",
+        runner: ["self-hosted", "Linux", "X64", "grow-ci", "open-group-super-cluster"],
+      },
       { architecture: "arm64", runner: "ubuntu-24.04-arm" },
     ]);
     const builders = steps.filter((step) => step.uses?.startsWith("docker/build-push-action@"));

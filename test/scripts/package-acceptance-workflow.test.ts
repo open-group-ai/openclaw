@@ -52,7 +52,6 @@ import {
 import { useAutoCleanupTempDirTracker } from "../helpers/temp-dir.js";
 import {
   evaluateWorkflowExpression,
-  evaluateWorkflowRunner,
   runWorkflowShellScript,
   testNodeExecPath,
 } from "./ci-workflow.test-support.js";
@@ -65,6 +64,8 @@ const CROSS_OS_RELEASE_CHECKS_REUSABLE_WORKFLOW =
 const LIVE_MEDIA_RUNNER_DOCKERFILE = ".github/images/live-media-runner/Dockerfile";
 const LIVE_MEDIA_RUNNER_IMAGE = "ghcr.io/openclaw/openclaw-live-media-runner:ubuntu-24.04";
 const LIVE_MEDIA_RUNNER_IMAGE_WORKFLOW = ".github/workflows/live-media-runner-image.yml";
+// Open Group: release Linux jobs run on the self-hosted super-cluster.
+const LINUX_RUNNER = ["self-hosted", "Linux", "X64", "grow-ci", "open-group-super-cluster"];
 const NPM_TELEGRAM_WORKFLOW = ".github/workflows/npm-telegram-beta-e2e.yml";
 const MANTIS_DISCORD_SMOKE_WORKFLOW = ".github/workflows/mantis-discord-smoke.yml";
 const MANTIS_DISCORD_STATUS_REACTIONS_WORKFLOW =
@@ -2789,7 +2790,7 @@ type WorkflowJob = {
   needs?: string | string[];
   outputs?: Record<string, string>;
   permissions?: Record<string, string>;
-  "runs-on"?: string;
+  "runs-on"?: string | string[];
   strategy?: {
     "fail-fast"?: boolean;
     "max-parallel"?: number;
@@ -10650,27 +10651,13 @@ describe("package artifact reuse", () => {
     );
     expect(workflow).toContain('bash -o pipefail -c "$OPENCLAW_LIVE_COMMAND"');
     expect(workflow).toContain("use_github_hosted_runners:");
-    for (const [jobName, runner] of [
-      ["validate_special_e2e", "blacksmith-32vcpu-ubuntu-2404"],
-      ["validate_live_provider_suites", "blacksmith-8vcpu-ubuntu-2404"],
-    ] as const) {
-      expect(evaluateWorkflowRunner(workflowJob(LIVE_E2E_WORKFLOW, jobName)["runs-on"])).toBe(
-        runner,
-      );
-      expect(
-        evaluateWorkflowRunner(workflowJob(LIVE_E2E_WORKFLOW, jobName)["runs-on"], {
-          useGithubHostedRunners: true,
-        }),
-      ).toBe("ubuntu-24.04");
+    for (const jobName of ["validate_special_e2e", "validate_live_provider_suites"]) {
+      expect(workflowJob(LIVE_E2E_WORKFLOW, jobName)["runs-on"]).toEqual(LINUX_RUNNER);
     }
     for (const jobName of ["build", "test"]) {
-      const selector = workflowJob(".github/workflows/openclaw-repo-e2e-reusable.yml", jobName)[
-        "runs-on"
-      ];
-      expect(evaluateWorkflowRunner(selector)).toBe("blacksmith-32vcpu-ubuntu-2404");
-      expect(evaluateWorkflowRunner(selector, { useGithubHostedRunners: true })).toBe(
-        "ubuntu-24.04",
-      );
+      expect(
+        workflowJob(".github/workflows/openclaw-repo-e2e-reusable.yml", jobName)["runs-on"],
+      ).toEqual(LINUX_RUNNER);
     }
     const repoE2eHarnessCheckout = workflowStep(
       workflowJob(".github/workflows/openclaw-repo-e2e-reusable.yml", "build"),
@@ -10740,13 +10727,8 @@ describe("package artifact reuse", () => {
     expect(workflow).toContain("suite_id: native-live-extensions-openai");
     expect(workflow).toContain("suite_id: native-live-extensions-o-z-other");
     expect(workflow).toContain("validate_live_media_provider_suites:");
-    const mediaRunner = workflowJob(LIVE_E2E_WORKFLOW, "validate_live_media_provider_suites")[
-      "runs-on"
-    ];
-    expect(evaluateWorkflowRunner(mediaRunner)).toBe("blacksmith-8vcpu-ubuntu-2404");
-    expect(evaluateWorkflowRunner(mediaRunner, { useGithubHostedRunners: true })).toBe(
-      "ubuntu-24.04",
-    );
+    const mediaJob = workflowJob(LIVE_E2E_WORKFLOW, "validate_live_media_provider_suites");
+    expect(mediaJob["runs-on"]).toEqual(LINUX_RUNNER);
     expect(workflow).toContain(`image: ${LIVE_MEDIA_RUNNER_IMAGE}`);
     expect(workflow).toContain("ffmpeg -version | head -1");
     expect(workflow).toContain("ffprobe -version | head -1");
@@ -14060,9 +14042,7 @@ printf '%s\\n' "$DEEPSEEK_API_KEY" "$DEEPINFRA_API_KEY"`,
       "qa_lab_parity_lane_release_checks",
       "qa_lab_parity_report_release_checks",
     ]) {
-      expect(evaluateWorkflowRunner(workflowJob(RELEASE_CHECKS_WORKFLOW, jobName)["runs-on"])).toBe(
-        "ubuntu-24.04",
-      );
+      expect(workflowJob(RELEASE_CHECKS_WORKFLOW, jobName)["runs-on"]).toEqual(LINUX_RUNNER);
     }
     for (const jobName of [
       "trusted_identity",
@@ -14071,9 +14051,7 @@ printf '%s\\n' "$DEEPSEEK_API_KEY" "$DEEPINFRA_API_KEY"`,
       "run_telegram",
       "advisory_status",
     ]) {
-      expect(
-        evaluateWorkflowRunner(workflowJob(RELEASE_TELEGRAM_QA_WORKFLOW, jobName)["runs-on"]),
-      ).toBe("ubuntu-24.04");
+      expect(workflowJob(RELEASE_TELEGRAM_QA_WORKFLOW, jobName)["runs-on"]).toEqual(LINUX_RUNNER);
     }
   });
 

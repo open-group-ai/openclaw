@@ -4,7 +4,7 @@ Course note: this file has the role of `claude-progress.md` in Learn Harness Eng
 
 ## Current Verified State
 
-- Repository root: `My-Clone-AI/openclaw` (product contract: root `AGENTS.md`, under 20,000 characters)
+- Repository root: `open-group-ai/openclaw` (product contract: root `AGENTS.md`, under 20,000 characters)
 - Standard startup path: `.agents/harness/AGENTS.md` → `.agents/harness/init.sh`
 - Standard verification path: `.agents/harness/init.sh` (harness state, `pnpm check:agents-md-size`, nsvx entry test); focused suites per `docs/help/testing/suites.md`
 - Product surface: OpenClaw Control desktop app → `nsvx` hub only (Miguel 2026-11-06 t45u–t48u). The old NSVX-themed icon-rail UI is retired.

@@ -11,7 +11,6 @@ import { createStablePluginNpmBootstrapApproval } from "../../scripts/plugin-npm
 import { resolveTestNodeExecPath } from "../../src/test-utils/node-process.js";
 import { requireNodeTool } from "../helpers/node-toolchain.js";
 import { useAutoCleanupTempDirTracker } from "../helpers/temp-dir.js";
-import { evaluateWorkflowRunner } from "./ci-workflow.test-support.js";
 
 const tempDirs = useAutoCleanupTempDirTracker(afterEach);
 const workflowPath = ".github/workflows/plugin-npm-release.yml";
@@ -36,7 +35,7 @@ type Job = {
   if?: string;
   needs?: string[] | string;
   permissions?: Record<string, string>;
-  "runs-on"?: string;
+  "runs-on"?: string | string[];
   steps?: Step[];
   strategy?: { matrix?: { plugin?: string } };
 };
@@ -986,7 +985,14 @@ it("runs one trusted-publisher exchange job directly after selected-package plan
   expect(oidc?.if).toContain("inputs.trusted_publisher_preflight");
   expect(oidc?.if).toContain("has_selection == 'true'");
   expect(oidc?.environment).toBe("npm-publish");
-  expect(evaluateWorkflowRunner(oidc?.["runs-on"])).toBe("ubuntu-latest");
+  // Open Group: Linux jobs run on the self-hosted super-cluster.
+  expect(oidc?.["runs-on"]).toEqual([
+    "self-hosted",
+    "Linux",
+    "X64",
+    "grow-ci",
+    "open-group-super-cluster",
+  ]);
   expect(oidc?.permissions).toEqual({ contents: "read", "id-token": "write" });
   expect(oidc?.strategy).toBeUndefined();
   expect(step(oidc, "Checkout trusted OIDC preflight tooling").with).toMatchObject({

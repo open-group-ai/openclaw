@@ -193,7 +193,6 @@ jobs:
               .map((category) => ({
                 language: category === "actions" ? "actions" : "javascript-typescript",
                 category,
-                runs_on: "ubuntu-24.04",
                 timeout_minutes: category === "actions" ? 10 : 25,
                 config_file: `./.github/codeql/codeql-${category}-critical-security.yml`,
               }));
@@ -205,7 +204,9 @@ jobs:
     name: Security High (${{ matrix.category }})
     # Gate before matrix expansion: a skip-only run must not record successful scan jobs.
     if: ${{ needs.scope.outputs.has_work == 'true' }}
-    runs-on: ${{ matrix.runs_on }}
+    # open-group-super-cluster is only on r3-r9. grow-ci is also on the 48
+    # open-group-N inference-host runners; CI must not land there.
+    runs-on: [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
     timeout-minutes: ${{ matrix.timeout_minutes }}
     strategy:
       fail-fast: false

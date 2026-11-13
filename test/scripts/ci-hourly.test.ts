@@ -328,7 +328,6 @@ describe("CodeQL language selection", () => {
         expected.map((category) => ({
           category,
           language: category === "actions" ? "actions" : "javascript-typescript",
-          runs_on: "ubuntu-24.04",
           timeout_minutes: category === "actions" ? 10 : 25,
           config_file: `./.github/codeql/codeql-${category}-critical-security.yml`,
         })),

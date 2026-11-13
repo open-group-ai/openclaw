@@ -33,6 +33,8 @@ env:
   TAURI_CLI_BINARY_SHA256: 23a27f61c50417fe87c92fa958fb56ecc8de7c791f78df3cac046c8579b45897
   TAURI_CLI_URL: https://github.com/tauri-apps/tauri/releases/download/tauri-cli-v2.11.4/cargo-tauri-x86_64-unknown-linux-gnu.tgz
 
+# Open Group: validate_release is limited to openclaw/openclaw, so nothing here runs in this org.
+# The macOS and Windows jobs target self-hosted labels instead of GitHub-hosted or Linux ones.
 jobs:
   validate_release:
     name: Validate release tag
@@ -636,7 +638,7 @@ jobs:
     name: Build unsigned macOS test bundles
     if: ${{ needs.validate_release.outputs.desktop_test_bundles == 'true' }}
     needs: validate_release
-    runs-on: xcode-27
+    runs-on: [self-hosted, macOS, ARM64]
     timeout-minutes: 45
     env:
       MACOSX_DEPLOYMENT_TARGET: "13.0"
@@ -716,7 +718,7 @@ jobs:
     name: Build Windows installer
     if: ${{ needs.validate_release.outputs.already_published != 'true' && needs.validate_release.outputs.windows_build == 'true' }}
     needs: validate_release
-    runs-on: [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
+    runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 45
     permissions:
       contents: read
@@ -781,7 +783,7 @@ jobs:
     name: Authenticode-sign Windows installer
     needs: [validate_release, build_windows]
     if: ${{ vars.OPENCLAW_RELEASE_WINDOWS_SIGNED == 'true' && needs.build_windows.result == 'success' }}
-    runs-on: [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
+    runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 15
     environment: release-signing
     permissions:

@@ -49,7 +49,7 @@ jobs:
   scope:
     name: Select installer platforms
     if: github.event_name != 'pull_request' || !github.event.pull_request.draft
-    runs-on: &linux_runner_ubuntu ubuntu-24.04
+    runs-on: &linux_runner_ubuntu [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
     outputs:
       unix: ${{ steps.scope.outputs.unix }}
       windows: ${{ steps.scope.outputs.windows }}
@@ -393,10 +393,12 @@ jobs:
             sudo tail -n 200 "$RUNNER_TEMP/fedora-dnf/dnf5.log"
           fi
 
+  # Open Group: the fleet has no self-hosted macOS or Windows runner and GitHub-hosted labels are
+  # forbidden, so these two installer lanes run only from manual dispatch.
   macos-installer:
     needs: scope
-    if: ${{ !cancelled() && needs.scope.result == 'success' && needs.scope.outputs.unix == 'true' }}
-    runs-on: xcode-27
+    if: ${{ github.event_name == 'workflow_dispatch' && !cancelled() && needs.scope.result == 'success' && needs.scope.outputs.unix == 'true' }}
+    runs-on: [self-hosted, macOS, ARM64]
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -421,8 +423,8 @@ jobs:
 
   windows-installer:
     needs: scope
-    if: ${{ !cancelled() && needs.scope.result == 'success' && needs.scope.outputs.windows == 'true' }}
-    runs-on: [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
+    if: ${{ github.event_name == 'workflow_dispatch' && !cancelled() && needs.scope.result == 'success' && needs.scope.outputs.windows == 'true' }}
+    runs-on: [self-hosted, Windows, X64]
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

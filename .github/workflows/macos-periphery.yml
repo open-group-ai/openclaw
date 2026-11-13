@@ -37,10 +37,13 @@ jobs:
     # open-group-super-cluster is only on r3-r9. grow-ci is also on the 48
     # open-group-N inference-host runners; CI must not land there.
     runs-on: [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
+    # Open Group: the fleet has no self-hosted macOS runner and GitHub-hosted labels are forbidden.
+    # Pull requests select no scan, so the macOS indexers and their Linux enforcers stay skipped;
+    # manual dispatches (directly or via the iOS/shared callers) keep the full scan.
     outputs:
-      should-scan: ${{ steps.scope.outputs.should-scan }}
-      shared-scan: ${{ steps.scope.outputs.shared-scan }}
-      ios-scan: ${{ steps.scope.outputs.ios-scan }}
+      should-scan: ${{ github.event_name == 'workflow_dispatch' && steps.scope.outputs.should-scan || 'false' }}
+      shared-scan: ${{ github.event_name == 'workflow_dispatch' && steps.scope.outputs.shared-scan || 'false' }}
+      ios-scan: ${{ github.event_name == 'workflow_dispatch' && steps.scope.outputs.ios-scan || 'false' }}
     steps:
       - name: Checkout
         if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
@@ -178,7 +181,7 @@ jobs:
       app-failure: ${{ steps.app-report.outputs.should-fail }}
       shared-complete: ${{ steps.build.outcome == 'success' && steps.shared-scan.outcome == 'success' && steps.shared-upload.outcome == 'success' }}
       shared-status: ${{ steps.shared-scan.outputs.status }}
-    runs-on: xcode-27
+    runs-on: [self-hosted, macOS, ARM64]
     timeout-minutes: 45
     steps:
       - name: Checkout
@@ -433,7 +436,7 @@ jobs:
       app-failure: ${{ steps.app-report.outputs.should-fail }}
       shared-complete: ${{ steps.build.outcome == 'success' && steps.shared-scan.outcome == 'success' && steps.shared-upload.outcome == 'success' }}
       shared-status: ${{ steps.shared-scan.outputs.status }}
-    runs-on: xcode-27
+    runs-on: [self-hosted, macOS, ARM64]
     timeout-minutes: 45
     steps:
       - name: Checkout
