@@ -43,7 +43,7 @@ type ScopeWorkflow = {
       name?: string;
       needs?: string[] | string;
       if?: string;
-      "runs-on"?: string;
+      "runs-on"?: string | string[];
       outputs?: Record<string, string>;
       steps?: WorkflowStep[];
     }
@@ -292,7 +292,7 @@ it("builds one iOS index for overlapping app and shared scope and retains two sc
   await expect(runScope(sharedWorkflow, change)).resolves.toBe("true");
   const jobs = WORKFLOW_CASES[0]!.workflow.jobs;
   const producer = jobs["ios-index"]!;
-  expect(producer["runs-on"]).toBe("xcode-27");
+  expect(producer["runs-on"]).toEqual(["self-hosted", "macOS", "ARM64"]);
   const scans = producer.steps!.filter(({ run = "" }) => run.includes("periphery scan"));
   expect(scans).toHaveLength(2);
   for (const step of scans) {
@@ -364,6 +364,25 @@ it.each(["ios", "macos"])(
       steps.build!.outcome = missingBuild;
       expect(enforce(appJob, "app")).toBe(1);
       expect(enforce(sharedJob, "shared")).toBe(1);
+    }
+  },
+);
+
+it.each(["pull_request", "workflow_dispatch"])(
+  "admits macOS-runner Periphery scans only from manual dispatch (%s)",
+  (eventName) => {
+    // Open Group has no self-hosted macOS runner; automatic events must not select the indexers.
+    const outputs = WORKFLOW_CASES[0]!.workflow.jobs.scope.outputs!;
+    for (const name of ["should-scan", "shared-scan", "ios-scan"]) {
+      const expression = outputs[name]!.replace(/^\$\{\{\s*|\s*\}\}$/gu, "").replace(
+        /steps\.scope\.outputs\.([\w-]+)/gu,
+        'steps.scope.outputs["$1"]',
+      );
+      const selected = compileFunction(`return (${expression});`, ["github", "steps"])(
+        { event_name: eventName },
+        { scope: { outputs: { [name]: "true" } } },
+      );
+      expect(selected, name).toBe(eventName === "workflow_dispatch" ? "true" : "false");
     }
   },
 );

@@ -135,7 +135,7 @@ type WorkflowStep = {
 
 type WorkflowJob = {
   "continue-on-error"?: boolean | string;
-  "runs-on"?: string;
+  "runs-on"?: string | string[];
   environment?: string;
   env?: Record<string, string>;
   if?: string;
@@ -410,44 +410,21 @@ function executeParentFilterValidation(
   return { output: readFileSync(output, "utf8"), result };
 }
 
-// Minimal GitHub expression sandbox for runner selectors; reserved runner groups stay unset.
-function runnerSandbox(context: Record<string, unknown>) {
-  return {
-    fromJSON: JSON.parse,
-    toJSON: JSON.stringify,
-    format: (template: string, ...args: unknown[]) =>
-      template
-        .replaceAll(/\{(\d+)\}/gu, (_match, index: string) => String(args[Number(index)]))
-        .replaceAll("{{", "{")
-        .replaceAll("}}", "}"),
-    ...context,
-    vars: { OPENCLAW_RELEASE_RUNNER_GROUP: "", ...(context.vars as object | undefined) },
-    inputs: { runner_group: "", ...(context.inputs as object | undefined) },
-  };
-}
+// Open Group: release jobs run on the self-hosted super-cluster, not hosted or Blacksmith routing.
+const LINUX_RUNNER = ["self-hosted", "Linux", "X64", "grow-ci", "open-group-super-cluster"];
 
 describe("release validation no-push transport", () => {
-  it.each(["github", "hybrid", ""])(
-    "keeps the QA Lab runtime-pair lane on Blacksmith when the backend is %j",
-    (backend) => {
-      const release = readWorkflow(RELEASE_CHECKS);
-      const runner = String(job(release, "qa_lab_runtime_pair_lane_release_checks")["runs-on"]);
-      const runsOn = (vars: Record<string, string>) =>
-        runInNewContext(runner.slice(3, -2), runnerSandbox({ vars }));
-      expect(runsOn({ OPENCLAW_CI_RUNNER_BACKEND: backend })).toBe("blacksmith-8vcpu-ubuntu-2404");
-      expect(
-        runsOn({
-          OPENCLAW_CI_RUNNER_BACKEND: backend,
-          OPENCLAW_RELEASE_RUNNER_GROUP: "release",
-        }),
-      ).toEqual({ group: "release", labels: "blacksmith-8vcpu-ubuntu-2404" });
-      const notice = job(release, "resolve_target").steps?.find(
-        (candidate) => candidate.name === "Report release runner routing",
-      );
-      expect(notice?.if).toBe("vars.OPENCLAW_CI_RUNNER_BACKEND == 'github'");
-      expect(notice?.run).toContain("QA Lab runtime-pair stays pinned to Blacksmith");
-    },
-  );
+  it("keeps the QA Lab runtime-pair lane on the self-hosted fleet", () => {
+    const release = readWorkflow(RELEASE_CHECKS);
+    expect(job(release, "qa_lab_runtime_pair_lane_release_checks")["runs-on"]).toEqual(
+      LINUX_RUNNER,
+    );
+    const notice = job(release, "resolve_target").steps?.find(
+      (candidate) => candidate.name === "Report release runner routing",
+    );
+    expect(notice?.if).toBe("vars.OPENCLAW_CI_RUNNER_BACKEND == 'github'");
+    expect(notice?.run).toContain("QA Lab runtime-pair stays pinned to Blacksmith");
+  });
 
   it("scopes release Gateway capacity to the existing repo E2E runner input", () => {
     const live = readWorkflow(LIVE_E2E);
@@ -530,56 +507,27 @@ describe("release validation no-push transport", () => {
         const expression = String(job(live, pipeline).with?.use_github_hosted_runners);
         const resolved = runInNewContext(expression.slice(3, -2), { inputs });
         expect(resolved).toBe(expected);
-        for (const phase of ["build", "test"]) {
-          const runner = job(repo, phase)["runs-on"]!;
-          expect(
-            runInNewContext(
-              runner.slice(3, -2),
-              runnerSandbox({ inputs: { use_github_hosted_runners: resolved } }),
-            ),
-          ).toBe(expected ? "ubuntu-24.04" : "blacksmith-32vcpu-ubuntu-2404");
-        }
+      }
+      for (const phase of ["build", "test"]) {
+        expect(job(repo, phase)["runs-on"], phase).toEqual(LINUX_RUNNER);
       }
     },
   );
 
-  it.each([
-    ["openclaw/openclaw", "hybrid", false, "blacksmith-4vcpu-ubuntu-2404"],
-    ["openclaw/openclaw", "github", false, "ubuntu-24.04"],
-    ["openclaw/openclaw", "", false, "ubuntu-24.04"],
-    ["fork/openclaw", "hybrid", false, "ubuntu-24.04"],
-    ["openclaw/openclaw", "hybrid", true, "ubuntu-24.04"],
-  ])(
-    "routes serial candidate jobs for %s/%s (hosted=%s)",
-    (repository, backend, hosted, runner) => {
-      const targets = [
-        [FULL_RELEASE, "resolve_target"],
-        [FULL_RELEASE, "evidence_reuse"],
-        [".github/workflows/full-release-candidate.yml", "discover"],
-        [".github/workflows/full-release-candidate.yml", "resolve_candidate"],
-        [LIVE_E2E, "validate_selected_ref"],
-        [LIVE_E2E, "bind_full_release_candidate_evidence"],
-      ];
-      for (const [workflowPath, name] of targets) {
-        // Only the reusable harness exposes an explicit hosted-runner override.
-        if (hosted && workflowPath !== LIVE_E2E) {
-          continue;
-        }
-        const expression = job(readWorkflow(workflowPath!), name!)["runs-on"]!;
-        const actual = expression.startsWith("${{")
-          ? runInNewContext(
-              expression.slice(3, -2),
-              runnerSandbox({
-                github: { repository },
-                inputs: { use_github_hosted_runners: hosted },
-                vars: { OPENCLAW_CI_RUNNER_BACKEND: backend },
-              }),
-            )
-          : expression;
-        expect(actual, `${workflowPath}:${name}`).toBe(runner);
-      }
-    },
-  );
+  it("runs serial candidate jobs on the self-hosted fleet", () => {
+    const targets = [
+      [FULL_RELEASE, "resolve_target"],
+      [FULL_RELEASE, "evidence_reuse"],
+      [".github/workflows/full-release-candidate.yml", "discover"],
+      [".github/workflows/full-release-candidate.yml", "resolve_candidate"],
+      [LIVE_E2E, "validate_selected_ref"],
+      [LIVE_E2E, "bind_full_release_candidate_evidence"],
+    ];
+    for (const [workflowPath, name] of targets) {
+      const runner = job(readWorkflow(workflowPath!), name!)["runs-on"];
+      expect(runner, `${workflowPath}:${name}`).toEqual(LINUX_RUNNER);
+    }
+  });
 
   it.each([
     { name: "local validated package", imported: false, status: 0, calls: 0 },

@@ -73,6 +73,10 @@ import {
 } from "./ci-workflow.test-support.js";
 
 const tempDirs = useAutoCleanupTempDirTracker(afterEach);
+// Open Group: CI jobs use fixed self-hosted labels instead of hosted/Blacksmith routing.
+const ORG_LINUX_RUNNER = ["self-hosted", "Linux", "X64", "grow-ci", "open-group-super-cluster"];
+const ORG_MACOS_RUNNER = ["self-hosted", "macOS", "ARM64"];
+const ORG_WINDOWS_RUNNER = ["self-hosted", "Windows", "X64"];
 // Reuse content-keyed compiler artifacts; each manifest still gets fresh files and processes.
 const compilerTempDir = useAutoCleanupTempDirTracker(afterAll).make(
   "openclaw-ci-manifest-compiler-",
@@ -112,6 +116,48 @@ function successfulNativeSetup() {
   );
 }
 
+describe("Open Group native lane gating", () => {
+  // The fleet has no self-hosted Windows or macOS runner, so only manual dispatch selects them.
+  it.each(["pull_request", "push", "workflow_dispatch"] as const)(
+    "selects Windows, macOS, and iOS lanes only from manual dispatch (%s)",
+    (eventName) => {
+      const workflow = readCiWorkflow();
+      const outputs = workflow.jobs.preflight.outputs;
+      const context = {
+        eventName,
+        repository: "openclaw/openclaw",
+        runAttempt: 1,
+        steps: {
+          manifest: {
+            outputs: {
+              run_checks_windows: "true",
+              run_macos_node: "true",
+              run_macos_swift: "true",
+              run_ios_build: "true",
+            },
+          },
+          changed_scope: { outputs: { run_ios_screenshots: "true" } },
+        },
+      };
+      for (const name of [
+        "run_checks_windows",
+        "run_macos_node",
+        "run_macos_swift",
+        "run_ios_build",
+        "run_ios_screenshots",
+      ]) {
+        expect(evaluateWorkflowExpression(outputs[name], context), name).toBe(
+          eventName === "workflow_dispatch" ? "true" : "false",
+        );
+      }
+      expect(workflow.jobs["checks-windows"]["runs-on"]).toEqual(ORG_WINDOWS_RUNNER);
+      for (const name of ["macos-node", "macos-swift", "macos-swift-packages", "ios-build"]) {
+        expect(workflow.jobs[name]["runs-on"], name).toEqual(ORG_MACOS_RUNNER);
+      }
+    },
+  );
+});
+
 describe("PostgreSQL conformance selection", () => {
   it("runs three balanced shards independently under the existing aggregate gate", () => {
     const workflow = readCiWorkflow();
@@ -122,7 +168,7 @@ describe("PostgreSQL conformance selection", () => {
       matrix: { shard: ["1/3", "2/3", "3/3"] },
     });
     expect(job["timeout-minutes"]).toBe(30);
-    expect(evaluateWorkflow(job["runs-on"])).toBe("ubuntu-24.04");
+    expect(job["runs-on"]).toEqual(ORG_LINUX_RUNNER);
     const conformance = requiredWorkflowStep(job.steps, "Run PostgreSQL conformance");
     expect(conformance.uses).toBe("./.ci-harness/.github/actions/postgres-conformance");
     expect(conformance.with).toEqual({
@@ -1632,12 +1678,7 @@ describe("ci workflow guards", () => {
               additionalNeeds: { "check-plan": { outputs: {}, result: "skipped" } },
             }),
           ).toBe(true);
-          expect(
-            evaluateWorkflowExpression(additional["runs-on"], {
-              ...context,
-              matrix,
-            }),
-          ).toBe(matrix.runner);
+          expect(additional["runs-on"]).toEqual(ORG_LINUX_RUNNER);
           const independentStep = requiredWorkflowStep(additional.steps, "Run independent checks");
           const rowContext = { ...context, matrix };
           expect(evaluateWorkflowCondition(independentStep.if, rowContext)).toBe(true);
@@ -3030,131 +3071,6 @@ describe("ci workflow guards", () => {
   );
 
   describe("bounded hybrid hosted offload", () => {
-    function emittedHostedRows(
-      outputs: Record<string, string>,
-      overrides: Partial<Parameters<typeof evaluateWorkflowExpression>[1]> = {},
-    ) {
-      const context = {
-        // Count full-manifest rows after admission, not a default security-only push.
-        ciOnPush: "true",
-        eventName: "push" as const,
-        repository: "openclaw/openclaw",
-        runAttempt: 1,
-        runnerBackend: "hybrid" as const,
-        // Reserve the reporter for unsuccessful checks when counting peak admission.
-        jobResults: { "checks-baseline-ratchets": "failure" },
-        additionalNeeds: {
-          "check-plan": { outputs },
-          "build-artifacts": {
-            result: "success" as const,
-            outputs: {
-              published_driver_artifact_id: "fixture-package",
-            },
-          },
-        },
-        ...overrides,
-        preflightOutputs: outputs,
-      };
-      const evaluate = (value: unknown, matrix: Record<string, unknown> = {}) =>
-        typeof value === "string" && value.startsWith("${{")
-          ? evaluateWorkflowExpression(value.replaceAll("fromJson(", "fromJSON("), {
-              ...context,
-              matrix,
-            })
-          : value;
-      const rows: string[] = [];
-      const hostedLabels = new Set(["ubuntu-24.04", "windows-2025", "xcode-27", "xcode-27-xlarge"]);
-      for (const [name, job] of Object.entries(readCiWorkflow().jobs)) {
-        const definition = job as {
-          if?: string;
-          uses?: string;
-          "runs-on": string;
-          strategy?: {
-            matrix: string | { include?: Record<string, unknown>[]; [key: string]: unknown };
-          };
-        };
-        const condition = definition.if;
-        if (
-          condition &&
-          !evaluate(condition.startsWith("${{") ? condition : `\${{ ${condition} }}`)
-        ) {
-          continue;
-        }
-        const matrix = evaluate(definition.strategy?.matrix) as
-          | {
-              include?: Record<string, unknown>[];
-              [key: string]: unknown;
-            }
-          | undefined;
-        let selectedRows: Record<string, unknown>[] = [{}];
-        if (matrix?.include) {
-          selectedRows = matrix.include;
-        } else if (matrix) {
-          for (const [key, value] of Object.entries(matrix)) {
-            const values = evaluate(value) as unknown[];
-            selectedRows = selectedRows.flatMap((row) =>
-              values.map((entry) => Object.assign({}, row, { [key]: entry })),
-            );
-          }
-        }
-        const runners = definition.uses?.startsWith("./.github/workflows/")
-          ? Object.values(readWorkflow(definition.uses.slice(2)).jobs).map(
-              (child) => (child as { "runs-on": string })["runs-on"],
-            )
-          : [definition["runs-on"]];
-        for (const row of selectedRows) {
-          for (const runner of runners) {
-            if (hostedLabels.has(String(evaluate(runner, row)))) {
-              rows.push(name);
-            }
-          }
-        }
-      }
-      return rows;
-    }
-
-    it("counts hosted qualification controls and preflight without counting the AWS cron row", () => {
-      const common = {
-        bundledPlanner: true,
-        historicalCompatibility: false,
-        runnerBackend: "runson" as const,
-        runnerProfile: "hybrid" as const,
-        nodeRunnerBackend: "runson" as const,
-        changedPaths: [".github/workflows/ci.yml"],
-      };
-      const ordinary = runCiManifestFixture({ ...common, eventName: "pull_request" });
-      const qualification = runCiManifestFixture({
-        ...common,
-        eventName: "workflow_dispatch",
-        releaseGate: true,
-        scopeEnv: { OPENCLAW_CI_HEAD_REPOSITORY: "" },
-      });
-      expect(ordinary.status, ordinary.output).toBe(0);
-      expect(qualification.status, qualification.output).toBe(0);
-      const actual = emittedHostedRows(
-        { ...qualification.outputs, node_runner_backend: "runson" },
-        {
-          eventName: "workflow_dispatch",
-          releaseGate: true,
-          runnerBackend: "runson",
-          runnerProfile: "hybrid",
-        },
-      );
-      expect(actual.filter((job) => job === "checks-node-core-test-nondist-shard")).toHaveLength(1);
-      expect(actual).toContain("preflight");
-      expect(actual).not.toContain("ci-gate");
-      expect(actual).not.toContain("check-lint-hosted-core-shard");
-      expect(actual).toContain("checks-baseline-ratchets");
-      expect(actual).not.toContain("check-plan");
-      expect(ordinary.outputs.split_pr_guards).toBe("true");
-      expect(qualification.outputs.split_pr_guards).toBe("false");
-      expect(Number(qualification.outputs.hybrid_hosted_base_rows)).toBe(
-        // Qualification retains native rows; ordinary PRs add one parallel guard row.
-        Number(ordinary.outputs.hybrid_hosted_base_rows) + 2 + 3 + 2 + 1 - 1,
-      );
-      expect(Number(qualification.outputs.hybrid_hosted_total_rows)).toBe(actual.length);
-    });
-
     function manifestWithHostedNodeRows(
       count: number,
       options: Partial<Parameters<typeof runCiManifestFixture>[0]> = {},
@@ -3182,109 +3098,6 @@ describe("ci workflow guards", () => {
         },
       });
     }
-
-    it("counts all three PostgreSQL conformance shards in hosted admission", () => {
-      const result = manifestWithHostedNodeRows(0, {
-        eventName: "pull_request",
-        changedPaths: ["src/infra/database-engine/open.ts"],
-        targetFiles: ["scripts/test-database-conformance.mjs"],
-      });
-      expect(result.status, result.output).toBe(0);
-      const rows = emittedHostedRows(
-        {
-          ...result.outputs,
-          hybrid_hosted_offload: "false",
-        },
-        { eventName: "pull_request" },
-      );
-      expect(rows.filter((name) => name === "postgres-conformance")).toHaveLength(3);
-      expect(Number(result.outputs.hybrid_hosted_base_rows)).toBe(rows.length);
-    });
-
-    it("reserves tiny hybrid controls and fork owners before admitting optional hosted rows", () => {
-      const eventName = "pull_request" as const;
-      const changedPaths = ["src/shared/runtime.ts"];
-      const options = { eventName, changedPaths, checkFamilyScope: true };
-      const baseline = manifestWithHostedNodeRows(1, options);
-      expect(baseline.status, baseline.output).toBe(0);
-      const nodeRows = 1 + 40 - Number(baseline.outputs.hybrid_hosted_base_rows);
-      expect(nodeRows).toBeGreaterThan(0);
-      const sameRepository = manifestWithHostedNodeRows(nodeRows, options);
-      const fork = manifestWithHostedNodeRows(nodeRows, {
-        ...options,
-        scopeEnv: { OPENCLAW_CI_HEAD_REPOSITORY: "contributor/openclaw" },
-      });
-      expect(sameRepository.status, sameRepository.output).toBe(0);
-      expect(fork.status, fork.output).toBe(0);
-      expect(Number(sameRepository.outputs.hybrid_hosted_base_rows)).toBe(40);
-      const sameRows = emittedHostedRows(sameRepository.outputs, { eventName });
-      const forkRows = emittedHostedRows(fork.outputs, {
-        eventName,
-        headRepository: "contributor/openclaw",
-      });
-      const hostedForkJobs = ["check-plan", "checks-baseline-ratchets", "docker-seed-e2e"].filter(
-        (name) => forkRows.includes(name) && !sameRows.includes(name),
-      ).length;
-      const forkBaseRows = 40 + hostedForkJobs - 3;
-      expect(Number(fork.outputs.hybrid_hosted_base_rows)).toBe(forkBaseRows);
-      for (const job of ["preflight", "ci-gate", "pr-failure-report", "check-plan"]) {
-        expect(sameRows).toContain(job);
-      }
-      expect(sameRows).toHaveLength(Number(sameRepository.outputs.hybrid_hosted_total_rows));
-      expect(forkRows).not.toContain("preflight");
-      expect(forkRows).not.toContain("ci-gate");
-      expect(forkRows).not.toContain("check-plan");
-      expect(sameRepository.outputs.hybrid_hosted_offload).toBe("true");
-      expect(fork.outputs.hybrid_hosted_offload).toBe(String(forkBaseRows <= 40));
-      expect(Number(fork.outputs.hybrid_hosted_total_rows)).toBeLessThanOrEqual(45);
-      expect(forkRows).toContain("pr-failure-report");
-    });
-
-    it.each([true, false])("bounds hosted rows with Android=%s", (androidSelected) => {
-      const scopeEnv = { OPENCLAW_CI_RUN_ANDROID: String(androidSelected) };
-      const baseline = manifestWithHostedNodeRows(0, { scopeEnv });
-      expect(baseline.status, baseline.output).toBe(0);
-      const originalBase = emittedHostedRows({
-        ...baseline.outputs,
-        hybrid_hosted_offload: "false",
-      }).length;
-      expect(Number(baseline.outputs.hybrid_hosted_base_rows)).toBe(originalBase);
-      for (const baseRows of [40, 41, 45, 46]) {
-        const manifest = manifestWithHostedNodeRows(baseRows - originalBase, { scopeEnv });
-        expect(manifest.status, manifest.output).toBe(0);
-        if (baseRows === 46) {
-          expect(manifest.output).toContain(
-            "::warning::Hybrid base manifest has 46 hosted jobs, above the 45-row offload budget; keeping optional offloads on Blacksmith.",
-          );
-        }
-        const hosted = emittedHostedRows(manifest.outputs);
-        expect(hosted.filter((name) => name === "android-access-native")).toHaveLength(
-          androidSelected ? 2 : 0,
-        );
-        expect(manifest.outputs.hybrid_hosted_offload).toBe(String(baseRows <= 40));
-        expect(Number(manifest.outputs.hybrid_hosted_base_rows)).toBe(baseRows);
-        expect(Number(manifest.outputs.hybrid_hosted_total_rows)).toBe(hosted.length);
-        const standaloneBrowser = manifest.outputs.reuse_browser_extension_build !== "true";
-        expect(hosted.length).toBe(
-          baseRows <= 40 ? baseRows + 1 + Number(standaloneBrowser) : baseRows,
-        );
-        expect(hosted.includes("security-fast")).toBe(baseRows <= 40);
-        expect(hosted.includes("checks-ui-e2e")).toBe(baseRows <= 40 && standaloneBrowser);
-        for (const name of [
-          "qa-smoke-ci-profile",
-          "checks-ui-e2e-real-gateway",
-          "build-artifacts",
-          "android",
-          "check-test-types-hosted-core-shard",
-          "check-lint-hosted-core-shard",
-        ]) {
-          expect(hosted, name).not.toContain(name);
-        }
-        expect(hosted).toContain("preflight");
-        expect(hosted).toContain("ci-gate");
-        expect(hosted.filter((name) => name === "checks-ui")).toHaveLength(0);
-      }
-    });
 
     it("runs the hosted health step from the current checkout without a sparse harness helper", () => {
       const step = readCiWorkflow().jobs.preflight.steps.find(
@@ -3400,36 +3213,9 @@ describe("ci workflow guards", () => {
             '["src/commands/doctor-config-preflight.plugin-persistence.test.ts"]',
           );
         }
-        const hosted = emittedHostedRows(manifest.outputs, { eventName, ref });
-        expect(Number(manifest.outputs.hybrid_hosted_total_rows)).toBe(hosted.length);
-        expect(hosted.filter((name) => name === "check-test-types-hosted-core-shard")).toHaveLength(
-          admitted ? 5 : 0,
-        );
         expect(manifest.outputs.hybrid_hosted_main_checks).toBe(
           String(admitted && eventName === "push"),
         );
-        const checkRunner = readCiWorkflow().jobs["check-shard"]["runs-on"];
-        for (const task of ["lint", "test-types"]) {
-          expect(
-            evaluateWorkflow(checkRunner, {
-              eventName,
-              ref,
-              runnerBackend: "hybrid",
-              preflightOutputs: manifest.outputs,
-              matrix: { task, runner: "blacksmith-16vcpu-ubuntu-2404" },
-            }),
-          ).toBe(
-            admitted && eventName === "push" ? "ubuntu-24.04" : "blacksmith-16vcpu-ubuntu-2404",
-          );
-        }
-        expect(
-          evaluateWorkflow(readCiWorkflow().jobs["build-artifacts"]["runs-on"], {
-            eventName,
-            ref,
-            runnerBackend: "hybrid",
-            preflightOutputs: manifest.outputs,
-          }),
-        ).toBe("blacksmith-16vcpu-ubuntu-2404");
         const step = readCiWorkflow().jobs.preflight.steps.find(
           (candidate: WorkflowStep) => candidate.id === "hosted_health",
         );
@@ -3501,26 +3287,6 @@ describe("ci workflow guards", () => {
       expect(preflight.outputs.hybrid_hosted_main_checks).toBe(
         "${{ steps.manifest.outputs.hybrid_hosted_main_checks }}",
       );
-      const boundaryRoute = readCiWorkflow().jobs["check-additional-shard"]["runs-on"];
-      for (const runnerBackend of ["hybrid", "runson", "github"] as const) {
-        for (const runAttempt of [1, 2]) {
-          expect(
-            evaluateWorkflow(boundaryRoute, {
-              runnerBackend,
-              runAttempt,
-              preflightOutputs: { hybrid_hosted_checks: "true" },
-              matrix: {
-                group: "extension-package-boundary",
-                runner: "blacksmith-32vcpu-ubuntu-2404",
-              },
-            }),
-          ).toBe(
-            runnerBackend === "github" || runAttempt > 1
-              ? "ubuntu-24.04"
-              : "blacksmith-32vcpu-ubuntu-2404",
-          );
-        }
-      }
       const baseline = manifestWithHostedNodeRows(0);
       const originalBase = Number(baseline.outputs.hybrid_hosted_base_rows);
       const offloadRows = 1 + Number(baseline.outputs.reuse_browser_extension_build !== "true");
@@ -3535,105 +3301,10 @@ describe("ci workflow guards", () => {
           const mainAdmitted = admitted && baseRows + offloadRows + 10 <= 45;
           expect(manifest.outputs.hybrid_hosted_checks).toBe(String(admitted));
           expect(manifest.outputs.hybrid_hosted_main_checks).toBe(String(mainAdmitted));
-          const hosted = emittedHostedRows(manifest.outputs);
-          const withoutChecks = emittedHostedRows({
-            ...manifest.outputs,
-            hybrid_hosted_checks: "false",
-            hybrid_hosted_main_checks: "false",
-          });
-          expect(Number(manifest.outputs.hybrid_hosted_total_rows)).toBe(hosted.length);
-          expect(hosted.length - withoutChecks.length).toBe(
-            (admitted ? 7 : 0) + (mainAdmitted ? 2 : 0),
-          );
-          expect(hosted).not.toContain("build-artifacts");
-          expect(
-            hosted.filter((name) => name === "check-test-types-hosted-core-shard"),
-          ).toHaveLength(admitted ? 5 : 0);
-          for (const name of ["check-shard", "check-additional-shard"]) {
-            expect(
-              hosted.filter((row) => row === name).length -
-                withoutChecks.filter((row) => row === name).length,
-            ).toBe(admitted ? (name === "check-shard" ? 1 + (mainAdmitted ? 2 : 0) : 1) : 0);
-          }
           // The security/browser decision remains independent of the new check admission.
           expect(manifest.outputs.hybrid_hosted_offload).toBe(String(baseRows <= 40));
-          for (const name of [
-            "checks-node-core-test-nondist-shard",
-            "qa-smoke-ci-profile",
-            "checks-ui-e2e-real-gateway",
-            "android",
-          ]) {
-            expect(hosted.filter((row) => row === name)).toEqual(
-              withoutChecks.filter((row) => row === name),
-            );
-          }
         }
       }
-    });
-
-    it.each([
-      {
-        label: "same-repo PR",
-        eventName: "pull_request" as const,
-        runnerProfile: "hybrid" as const,
-        headRepository: "openclaw/openclaw",
-      },
-      {
-        label: "trusted fork PR",
-        eventName: "pull_request" as const,
-        runnerProfile: "github" as const,
-        headRepository: "contributor/openclaw",
-      },
-      {
-        label: "main",
-        eventName: "push" as const,
-        runnerProfile: "hybrid" as const,
-        headRepository: "openclaw/openclaw",
-      },
-    ])("counts all selected rows for $label", ({ eventName, runnerProfile, headRepository }) => {
-      const manifest = manifestWithHostedNodeRows(0, {
-        eventName,
-        runnerProfile,
-        changedPaths: ["apps/ios/Sources/Foo.swift"],
-        scopeEnv: {
-          OPENCLAW_CI_HEAD_REPOSITORY: headRepository,
-          OPENCLAW_CI_RUN_MACOS_NODE: "true",
-          OPENCLAW_CI_RUN_IOS_SCREENSHOTS: "true",
-          OPENCLAW_CI_RUN_ANDROID_SCREENSHOTS: "true",
-        },
-      });
-      expect(manifest.status, manifest.output).toBe(0);
-      expect(manifest.outputs.hybrid_hosted_offload).toBe("true");
-      const context = { eventName, runnerProfile, headRepository };
-      const outputs = {
-        ...manifest.outputs,
-        run_ios_screenshots: "true",
-      };
-      const base = emittedHostedRows({ ...outputs, hybrid_hosted_offload: "false" }, context);
-      expect(Number(manifest.outputs.hybrid_hosted_base_rows)).toBe(base.length);
-      expect(Number(manifest.outputs.hybrid_hosted_total_rows)).toBe(
-        emittedHostedRows(outputs, context).length,
-      );
-      expect(base.filter((name) => name === "macos-node")).toHaveLength(
-        eventName === "pull_request" ? 0 : 3,
-      );
-      expect(base.filter((name) => name === "ios-screenshot-capture")).toHaveLength(1);
-      expect(base.filter((name) => name === "ios-screenshot-evidence")).toHaveLength(1);
-      expect(base.filter((name) => name === "android-screenshots")).toHaveLength(
-        eventName === "pull_request" ? 0 : 1,
-      );
-      for (const job of ["preflight", "ci-gate"]) {
-        expect(base.filter((name) => name === job)).toHaveLength(
-          headRepository === "openclaw/openclaw" ? 1 : 0,
-        );
-      }
-      expect(base.filter((name) => name === "pr-failure-report")).toHaveLength(
-        eventName === "pull_request" ? 1 : 0,
-      );
-      expect(base).not.toContain("check-lint-hosted-core-shard");
-      expect(base.filter((name) => name === "check-lint-hosted-extension-shard")).toHaveLength(
-        runnerProfile === "hybrid" ? 3 : 0,
-      );
     });
 
     it.each<{ label: string } & Partial<Parameters<typeof runCiManifestFixture>[0]>>([
@@ -3669,9 +3340,7 @@ describe("ci workflow guards", () => {
         failed: true,
       };
       expect(evaluateWorkflowExpression(job.if, context)).toBe(true);
-      expect(evaluateWorkflowExpression(job["runs-on"], context)).toBe(
-        "blacksmith-4vcpu-ubuntu-2404",
-      );
+      expect(job["runs-on"]).toEqual(ORG_LINUX_RUNNER);
       expect(evaluateWorkflowExpression(job.if, { ...context, cancelled: true })).toBe(false);
     });
   });
@@ -5350,7 +5019,7 @@ describe("ci workflow guards", () => {
     expect(workflow.jobs.preflight.outputs.node_runner_backend).toBe(
       "${{ steps.runner_profile.outputs.node_runner_backend }}",
     );
-    expect(workflow.jobs.preflight["runs-on"]).toContain("vars.OPENCLAW_CI_RUNNER_BACKEND");
+    expect(workflow.jobs.preflight["runs-on"]).toEqual(ORG_LINUX_RUNNER);
 
     const dispatchManifest = runCiManifestFixture({
       bundledPlanner: true,
@@ -5531,22 +5200,14 @@ describe("ci workflow guards", () => {
     };
     for (const name of Object.keys(workflow.jobs)) {
       const job = workflow.jobs[name];
-      if (
-        !String(job.needs).includes("preflight") ||
-        typeof job["runs-on"] !== "string" ||
-        !job["runs-on"].startsWith("${{")
-      ) {
+      if (!String(job.needs).includes("preflight")) {
         continue;
       }
       const control = {
         ...context,
         preflightOutputs: { ...admitted.outputs, boat_build_qualification: "false" },
       };
-      expect(evaluateWorkflowExpression(job["runs-on"], context), name).toEqual(
-        name === "build-artifacts"
-          ? "boat-xlarge"
-          : evaluateWorkflowExpression(job["runs-on"], control),
-      );
+      // Open Group: runners are fixed self-hosted labels; only dependency-cache still routes.
       for (const step of job.steps ?? []) {
         if (step.with?.["dependency-cache"] === undefined) {
           continue;
@@ -5568,12 +5229,7 @@ describe("ci workflow guards", () => {
     });
     expect(retry.status, retry.output).toBe(0);
     expect(retry.outputs.boat_build_qualification).toBe("false");
-    expect(
-      evaluateWorkflowExpression(workflow.jobs["build-artifacts"]["runs-on"], {
-        ...context,
-        runAttempt: 2,
-      }),
-    ).toBe("ubuntu-24.04");
+    expect(workflow.jobs["build-artifacts"]["runs-on"]).toEqual(ORG_LINUX_RUNNER);
     expect(
       runRunnerProfileFixture({
         ...fixture,
@@ -5690,18 +5346,16 @@ describe("ci workflow guards", () => {
           }
         }
         for (const task of ["dependencies", "lint", "test-types"]) {
-          const matrix = expectDefined(
+          expectDefined(
             evaluateWorkflowExpression(
               workflow.jobs["check-shard"].strategy.matrix,
               qualified,
             ).include.find((candidate: { task: string }) => candidate.task === task),
             `check matrix task ${task}`,
           );
-          const row = { ...qualified, matrix };
-          expect(evaluateWorkflowExpression(workflow.jobs["check-shard"]["runs-on"], row)).toBe(
-            hosted === "true" ? "ubuntu-24.04" : "blacksmith-16vcpu-ubuntu-2404",
-          );
         }
+        // Open Group: check rows run on fixed self-hosted labels regardless of hosted admission.
+        expect(workflow.jobs["check-shard"]["runs-on"]).toEqual(ORG_LINUX_RUNNER);
       }
       const retry = runRunnerProfileFixture({
         ...fixture,
@@ -5722,15 +5376,15 @@ describe("ci workflow guards", () => {
           steps: { ...context.steps, runner_profile: { outputs: retry.outputs } },
         }),
       ).toBe("github");
-      for (const [jobName, runner, timeout] of [
-        ["android", "ubuntu-24.04", 35],
-        ["checks-ui-e2e-real-gateway", "ubuntu-24.04", 40],
-        ["build-artifacts", "ubuntu-24.04", 35],
-        ["checks-ui", "ubuntu-24.04", 35],
+      for (const [jobName, timeout] of [
+        ["android", 35],
+        ["checks-ui-e2e-real-gateway", 40],
+        ["build-artifacts", 35],
+        ["checks-ui", 35],
       ] as const) {
         const job = workflow.jobs[jobName];
         const retainedRetry = { ...context, runAttempt: 2, preflightOutputs: admitted.outputs };
-        expect(evaluateWorkflowExpression(job["runs-on"], retainedRetry), jobName).toBe(runner);
+        expect(job["runs-on"], jobName).toEqual(ORG_LINUX_RUNNER);
         if (typeof job["timeout-minutes"] === "string") {
           expect(evaluateWorkflowExpression(job["timeout-minutes"], retainedRetry), jobName).toBe(
             timeout,
@@ -6010,141 +5664,28 @@ describe("ci workflow guards", () => {
   it("uses bundled Node shards and telemetry-backed runner sizes", () => {
     const workflow = readCiWorkflow();
     const buildArtifactsTestbox = readBuildArtifactsTestboxWorkflow();
-    const source = readFileSync(".github/workflows/ci.yml", "utf8");
-    const plannerRunner = workflow.jobs["check-plan"]["runs-on"];
-    const plannerContext = {
-      eventName: "pull_request" as const,
-      repository: "openclaw/openclaw",
-      runAttempt: 1,
-      runnerBackend: "hybrid" as const,
-      runnerProfile: "hybrid" as const,
-    };
-    for (const eventName of ["pull_request", "push", "schedule"] as const) {
-      expect(evaluateWorkflowExpression(plannerRunner, { ...plannerContext, eventName })).toBe(
-        eventName === "pull_request" ? "ubuntu-24.04" : "blacksmith-16vcpu-ubuntu-2404",
-      );
-    }
-    const typeRunner = workflow.jobs["check-test-types-hosted-core-shard"]["runs-on"];
-    const lintRunner = workflow.jobs["check-lint-hosted-core-shard"]["runs-on"];
-    for (const runnerBackend of ["", "blacksmith", "hybrid"] as const) {
-      for (const authorAssociation of ["NONE", "CONTRIBUTOR", "OWNER"]) {
-        const fork = {
-          ...plannerContext,
-          runnerBackend,
-          runnerProfile: "github" as const,
-          headRepository: "contributor/openclaw",
-          authorAssociation,
-        };
-        for (const runner of [plannerRunner, typeRunner, lintRunner]) {
-          expect(evaluateWorkflowExpression(runner, fork)).toBe("blacksmith-16vcpu-ubuntu-2404");
-          for (const override of [
-            { runnerBackend: "github" },
-            { runAttempt: 2 },
-            { eventName: "workflow_dispatch" },
-            { repository: "contributor/openclaw" },
-          ] as const) {
-            expect(evaluateWorkflowExpression(runner, { ...fork, ...override })).toBe(
-              "ubuntu-24.04",
-            );
-          }
-        }
-        // Frozen defaults retain their historical hosted route; hybrid owns its own layout.
-        if (runnerBackend !== "hybrid") {
-          expect(evaluateWorkflowExpression(typeRunner, { ...fork, frozenTarget: true })).toBe(
-            "ubuntu-24.04",
-          );
-        }
-        expect(evaluateWorkflowExpression(lintRunner, { ...fork, frozenTarget: true })).toBe(
-          "ubuntu-24.04",
-        );
-        for (const stripe of [1, 2, 3, 4, 5]) {
-          expect(evaluateWorkflowExpression(lintRunner, { ...fork, matrix: { stripe } })).toBe(
-            "blacksmith-16vcpu-ubuntu-2404",
-          );
-        }
-      }
-    }
-    const qualification = {
-      ...plannerContext,
-      eventName: "workflow_dispatch" as const,
-      preflightOutputs: { ci_qualification: "true", qualification_runner_backend: "hybrid" },
-    };
-    expect(evaluateWorkflowExpression(plannerRunner, qualification)).toBe(
-      "blacksmith-16vcpu-ubuntu-2404",
-    );
-    expect(
-      evaluateWorkflowExpression(plannerRunner, {
-        ...qualification,
-        dispatchId: "full-release-validation-test",
-        releaseRunnerGroup: "test-group",
-      }),
-    ).toEqual({ group: "test-group", labels: "blacksmith-16vcpu-ubuntu-2404" });
-    for (const override of [
-      { runnerBackend: "github" },
-      { runnerBackend: "runson" },
-      { preflightOutputs: { node_runner_backend: "runson" } },
-      { repository: "contributor/openclaw" },
-      { runAttempt: 2 },
-      { frozenTarget: true },
-      { eventName: "workflow_dispatch" },
-    ] as const) {
-      expect(
-        evaluateWorkflowExpression(plannerRunner, { ...plannerContext, ...override }),
-        JSON.stringify(override),
-      ).toBe("ubuntu-24.04");
+    // Open Group: planner, check, and artifact jobs use fixed self-hosted labels.
+    for (const job of [
+      "check-plan",
+      "check-test-types-hosted-core-shard",
+      "check-lint-hosted-core-shard",
+      "build-artifacts",
+      "checks-node-core-test-nondist-shard",
+      "check-additional-shard",
+    ]) {
+      expect(workflow.jobs[job]["runs-on"], job).toEqual(ORG_LINUX_RUNNER);
     }
 
     expect(readFileSync("scripts/ci-build-manifest.mjs", "utf8")).toContain(
       "createNodeTestShardBundles",
     );
-    const artifactRunner = workflow.jobs["build-artifacts"]["runs-on"];
-    for (const [frozenTarget, expected] of [
-      ["false", "blacksmith-16vcpu-ubuntu-2404"],
-      ["true", "blacksmith-16vcpu-ubuntu-2404"],
-      ["", "blacksmith-16vcpu-ubuntu-2404"],
-    ] as const) {
-      const context = {
-        eventName: "push",
-        repository: "openclaw/openclaw",
-        runAttempt: 1,
-        preflightOutputs: { frozen_target: frozenTarget },
-      } as const;
-      for (const runnerBackend of ["", "blacksmith", "hybrid"] as const) {
-        for (const eventName of ["push", "pull_request"] as const) {
-          expect(
-            evaluateWorkflowExpression(artifactRunner, { ...context, runnerBackend, eventName }),
-            `build-artifacts: ${runnerBackend || "default"}/${eventName}/frozen=${frozenTarget}`,
-          ).toBe(expected);
-        }
-      }
-      expect(
-        evaluateWorkflowExpression(artifactRunner, {
-          ...context,
-          eventName: "pull_request",
-          authorAssociation: "NONE",
-          headRepository: "fork/openclaw",
-        }),
-        "build-artifacts: untrusted fork first attempt",
-      ).toBe(expected);
-      for (const override of [
-        { runnerBackend: "github" },
-        { runnerBackend: "hybrid", runAttempt: 2 },
-        { eventName: "workflow_dispatch" },
-        { eventName: "pull_request", headRepository: "fork/openclaw", runAttempt: 2 },
-      ] as const) {
-        expect(evaluateWorkflowExpression(artifactRunner, { ...context, ...override })).toBe(
-          "ubuntu-24.04",
-        );
-      }
-    }
     expect(workflow.jobs["build-artifacts"]["timeout-minutes"]).toBe(
       "${{ ((needs.preflight.outputs.ci_qualification == 'true' && (github.run_attempt == 1 && needs.preflight.outputs.qualification_runner_backend || 'github') || vars.OPENCLAW_CI_RUNNER_BACKEND) == 'github' || (contains(fromJSON('[\"hybrid\",\"runson\"]'), (needs.preflight.outputs.ci_qualification == 'true' && (github.run_attempt == 1 && needs.preflight.outputs.qualification_runner_backend || 'github') || vars.OPENCLAW_CI_RUNNER_BACKEND)) && github.run_attempt > 1) || (github.event_name == 'workflow_dispatch' && needs.preflight.outputs.ci_shape != 'main') || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)) && 35 || 20 }}",
     );
-    // PR events validate the artifact build on hosted runners (landing gate
-    // stays satisfiable during Blacksmith outages); Testbox leases are
-    // dispatch-only, mirroring ci-check-testbox.yml.
+    // Open Group: PR events validate the artifact build on the self-hosted fleet; Testbox
+    // leases are dispatch-only, mirroring ci-check-testbox.yml.
     for (const [eventName, expected] of [
-      ["pull_request", "ubuntu-24.04"],
+      ["pull_request", ORG_LINUX_RUNNER],
       ["workflow_dispatch", "blacksmith-16vcpu-ubuntu-2404"],
     ] as const) {
       expect(
@@ -6154,7 +5695,7 @@ describe("ci workflow guards", () => {
             admission: { outputs: { runner: "blacksmith-16vcpu-ubuntu-2404" }, result: "success" },
           },
         }),
-      ).toBe(expected);
+      ).toEqual(expected);
     }
     for (const stepName of ["Begin Testbox", "Run Testbox"]) {
       expect(
@@ -6171,9 +5712,6 @@ describe("ci workflow guards", () => {
     ).toBe(
       "${{ github.event_name == 'pull_request' && '--max-old-space-size=8192' || '--max-old-space-size=16384' }}",
     );
-    expect(workflow.jobs["checks-node-core-test-nondist-shard"]["runs-on"]).toContain(
-      "blacksmith-4vcpu-ubuntu-2404",
-    );
     for (const task of ["dependencies", "test-types"]) {
       expect(
         evaluateWorkflow(workflow.jobs["check-shard"].strategy.matrix, {
@@ -6186,7 +5724,6 @@ describe("ci workflow guards", () => {
         runner: "blacksmith-16vcpu-ubuntu-2404",
       });
     }
-    expect(workflow.jobs["check-additional-shard"]["runs-on"]).toContain("matrix.runner");
     expect(readFrozenAdditionalCheckRows()).toContainEqual({
       check_name: "check-additional-runtime-topology-architecture",
       group: "runtime-topology-architecture",
@@ -6207,9 +5744,8 @@ describe("ci workflow guards", () => {
       group: "sqlite-session-schema-baseline",
       runner: "blacksmith-4vcpu-ubuntu-2404",
     });
-    // The Windows matrix carries no per-row runner: both parts share one class.
-    expect(workflow.jobs["checks-windows"]["runs-on"]).not.toContain("matrix.runner");
-    expect(source).toContain("blacksmith-16vcpu-windows-2025");
+    // The Windows matrix carries no per-row runner: both parts share one self-hosted label set.
+    expect(workflow.jobs["checks-windows"]["runs-on"]).toEqual(ORG_WINDOWS_RUNNER);
   });
 
   it.each(["restore-main", "save-main", "publish-run", "restore-run"])(
@@ -6318,18 +5854,8 @@ describe("ci workflow guards", () => {
     expect(forkShared.outputs.shared_sdk_declarations).toBe("false");
     const forkRows = JSON.parse(forkPrevious.outputs.check_additional_matrix!).include;
     expect(JSON.parse(forkShared.outputs.check_additional_matrix!).include).toEqual(forkRows);
-    for (const authorAssociation of ["OWNER", "NONE"]) {
-      for (const runAttempt of [1, 2]) {
-        expect(
-          evaluateWorkflow(producer["runs-on"], {
-            headRepository: "openclaw/openclaw",
-            authorAssociation,
-            runnerBackend: "hybrid",
-            runAttempt,
-          }),
-        ).toBe(runAttempt === 1 ? "blacksmith-16vcpu-ubuntu-2404" : "ubuntu-24.04");
-      }
-    }
+    // Open Group: the producer runs on fixed self-hosted labels for every attempt.
+    expect(producer["runs-on"]).toEqual(ORG_LINUX_RUNNER);
     expect(producer.needs).toEqual(["preflight"]);
     expect(workflow.jobs["check-additional-shard"].needs).toEqual(["preflight"]);
     expect(workflow.jobs["check-test-types-hosted-core-shard"].needs).toEqual([
@@ -8854,6 +8380,7 @@ describe("ci workflow guards", () => {
       ]) {
         const job = workflow.jobs[jobName];
         const expression = job.if.startsWith("${{") ? job.if : `\${{ ${job.if} }}`;
+        // Open Group: preflight admits Windows/macOS/iOS lanes only from manual dispatch.
         expect(
           evaluateWorkflowExpression(expression, {
             ...context,
@@ -8866,7 +8393,10 @@ describe("ci workflow guards", () => {
             },
           }),
           jobName,
-        ).toBe(selectedJobs.includes(jobName));
+        ).toBe(
+          selectedJobs.includes(jobName) &&
+            (jobName === "android" || eventName === "workflow_dispatch"),
+        );
       }
       for (const jobName of ["ios-screenshot-capture", "ios-screenshot-evidence"]) {
         expect(
@@ -10732,7 +10262,7 @@ describe("ci workflow guards", () => {
     expect(uiE2e.if).toBe(
       "needs.preflight.outputs.run_ui_e2e == 'true' && needs.preflight.outputs.compatibility_target != 'true'",
     );
-    expect(uiE2e["runs-on"]).not.toBe(ui["runs-on"]);
+    expect([ui["runs-on"], uiE2e["runs-on"]]).toEqual([ORG_LINUX_RUNNER, ORG_LINUX_RUNNER]);
     expect(uiE2e["timeout-minutes"]).toBe(25);
     expect(uiE2e.env).toEqual({
       OPENCLAW_UI_E2E_SKIP_REAL_GATEWAY: "1",
@@ -10906,7 +10436,6 @@ describe("ci workflow guards", () => {
           : `checks-ui-e2e-real-gateway (${matrix.shard}/${matrix.shard_count})`,
       setup: realGatewaySetup,
       matrix,
-      blacksmithRunner: "blacksmith-16vcpu-ubuntu-2404",
     }));
     const routedUiE2eJobs = [
       ...expectedUiE2eMatrices
@@ -10916,10 +10445,6 @@ describe("ci workflow guards", () => {
           name: `checks-ui-e2e (${matrix.shard}/${matrix.shard_count})`,
           setup: uiE2eSetup,
           matrix,
-          blacksmithRunner:
-            matrix.task === "control-ui"
-              ? "blacksmith-16vcpu-ubuntu-2404"
-              : "blacksmith-8vcpu-ubuntu-2404",
         })),
       ...routedRealGatewayJobs,
     ] as const;
@@ -10968,7 +10493,7 @@ describe("ci workflow guards", () => {
       ["workflow dispatch", { eventName: "workflow_dispatch" }, false, "false"],
       ["canonical push retry", { eventName: "push", runAttempt: 2 }, true, "true"],
     ] as const;
-    for (const { blacksmithRunner, job, matrix, name: jobName, setup } of routedUiE2eJobs) {
+    for (const { job, matrix, name: jobName, setup } of routedUiE2eJobs) {
       for (const [scenarioName, context, blacksmith, dependencyCache] of routingScenarios) {
         const assertionName = `${jobName}: ${scenarioName}`;
         expect(
@@ -10977,9 +10502,8 @@ describe("ci workflow guards", () => {
           ),
           assertionName,
         ).toBe(jobName);
-        expect(evaluateWorkflow(job["runs-on"], { ...context, matrix }), assertionName).toBe(
-          blacksmith ? blacksmithRunner : "ubuntu-24.04",
-        );
+        // Open Group: fixed self-hosted labels; only the dependency cache follows the route.
+        expect(job["runs-on"], assertionName).toEqual(ORG_LINUX_RUNNER);
         expect(
           evaluateWorkflow(setup.with?.["dependency-cache"], {
             ...context,
@@ -13259,7 +12783,7 @@ describe("ci workflow guards", () => {
     expect(runStep.run).not.toContain("qa-smoke-ci)");
     expect(runStep.run).toContain("contracts-plugins-ci-routing)");
     expect(runStep.run).toContain("ci-routing)");
-    expect(fastCoreJob["runs-on"]).toContain("matrix.runner");
+    expect(fastCoreJob["runs-on"]).toEqual(ORG_LINUX_RUNNER);
     expect(smokeProfileJob.name).toBe("QA Smoke CI (${{ matrix.name }})");
     // Leak invariant: dist must never be packed after the private overlay
     // build. Today that holds vacuously — the smoke set has no docker-lane
@@ -13344,74 +12868,8 @@ describe("ci workflow guards", () => {
         }),
       ).toBe(expected);
     }
-    const smokeRunnerContext = {
-      eventName: "schedule" as const,
-      repository: "openclaw/openclaw",
-      ref: "refs/heads/main",
-      runnerBackend: "hybrid" as const,
-      runAttempt: 1,
-      matrix: { part_count: 4 },
-      preflightOutputs: { compatibility_target: "false" },
-    };
-    for (const eventName of ["push", "schedule"] as const) {
-      expect(
-        evaluateWorkflowExpression(smokeProfileJob["runs-on"], {
-          ...smokeRunnerContext,
-          eventName,
-        }),
-      ).toBe("blacksmith-8vcpu-ubuntu-2404");
-    }
-    const smokeRunnerFallbacks: Partial<Parameters<typeof evaluateWorkflowExpression>[1]>[] = [
-      { ref: "refs/heads/extended-stable/2026.9.33" },
-      { eventName: "pull_request" },
-      { matrix: { part_count: 6 } },
-      { matrix: {} },
-      { runnerBackend: "blacksmith" },
-      { runnerBackend: "runson" },
-      { runnerBackend: "" },
-      { runnerProfile: "blacksmith" },
-      { frozenTarget: true },
-      { preflightOutputs: { compatibility_target: "true" } },
-      { preflightOutputs: { compatibility_target: "" } },
-      { preflightOutputs: {} },
-      { preflightOutputs: { compatibility_target: "false", frozen_target: "" } },
-    ];
-    for (const override of smokeRunnerFallbacks) {
-      expect(
-        evaluateWorkflowExpression(smokeProfileJob["runs-on"], {
-          ...smokeRunnerContext,
-          ...override,
-        }),
-        JSON.stringify(override),
-      ).toBe("blacksmith-16vcpu-ubuntu-2404");
-    }
-    for (const override of [
-      { runnerBackend: "github" },
-      { runAttempt: 2 },
-      { eventName: "workflow_dispatch" },
-      { repository: "contributor/openclaw" },
-    ] as const) {
-      expect(
-        evaluateWorkflowExpression(smokeProfileJob["runs-on"], {
-          ...smokeRunnerContext,
-          ...override,
-        }),
-        JSON.stringify(override),
-      ).toBe("ubuntu-24.04");
-    }
-    expect(
-      evaluateWorkflowExpression(smokeProfileJob["runs-on"], {
-        ...smokeRunnerContext,
-        eventName: "workflow_dispatch",
-        dispatchId: "full-release-validation-test",
-        releaseRunnerGroup: "test-group",
-        preflightOutputs: {
-          ci_qualification: "true",
-          qualification_runner_backend: "hybrid",
-          compatibility_target: "false",
-        },
-      }),
-    ).toEqual({ group: "test-group", labels: "blacksmith-16vcpu-ubuntu-2404" });
+    // Open Group: QA Smoke rows run on fixed self-hosted labels.
+    expect(smokeProfileJob["runs-on"]).toEqual(ORG_LINUX_RUNNER);
     expect(smokeDockerCacheStep).toBeUndefined();
     expect(smokeRunStep.run).toContain("createQaSmokeCiPart");
     expect(smokeRunStep.run).toContain("createQaSmokeCiPart(partId, partCount)");

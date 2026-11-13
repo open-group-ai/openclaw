@@ -102,6 +102,8 @@ const PINNED_GIT_OWNER = {
   name: "Prepare Git owner",
   uses: "openclaw/openclaw/.github/actions/git-owner@88095dc00eef288c3829909d4dc64a9e249fa7ef",
 };
+// Open Group: Linux jobs use the self-hosted super-cluster; hosted and Blacksmith routing is gone.
+const ORG_LINUX_RUNNER = ["self-hosted", "Linux", "X64", "grow-ci", "open-group-super-cluster"];
 const tempDirs = useAutoCleanupTempDirTracker(afterEach);
 const rootPackageManager = (
   JSON.parse(readFileSync("package.json", "utf8")) as {
@@ -566,7 +568,7 @@ describe("ci workflow guards", () => {
     const job = readCiWorkflow().jobs["android-screenshots"];
     expect(job.permissions).toEqual({ contents: "read" });
     expect(job.environment).toBeUndefined();
-    expect(evaluateWorkflowRunner(job["runs-on"])).toBe("ubuntu-24.04");
+    expect(evaluateWorkflowRunner(job["runs-on"])).toEqual(ORG_LINUX_RUNNER);
     const toolchain = job.steps.find(
       (step: WorkflowStep) => step.uses === "./.ci-harness/.github/actions/setup-android-toolchain",
     );
@@ -902,6 +904,7 @@ AFTER_CD
         ["workflow_dispatch", false, "failure", false, false],
         ["workflow_dispatch", false, "success", true, false],
       ] as const) {
+        // Open Group has no self-hosted ARM64 runner; check-arm runs only from manual dispatch.
         expect(
           evaluateWorkflowExpression(workflow.jobs[jobName].if, {
             eventName,
@@ -910,7 +913,7 @@ AFTER_CD
             additionalNeeds: { admission: { outputs: {}, result } },
           }),
           `${workflowPath}: ${eventName}, admission=${result}, cancelled=${cancelled}`,
-        ).toBe(admitted);
+        ).toBe(admitted && (jobName !== "check-arm" || eventName === "workflow_dispatch"));
       }
     }
   });
@@ -1677,18 +1680,15 @@ AFTER_CD
           runnerBackend,
           runAttempt,
         };
-        const runner = evaluateWorkflowExpression(workflow.jobs.android["runs-on"], context);
         const parallel = evaluateWorkflowExpression(
           workflow.jobs.android.strategy["max-parallel"],
           context,
         );
         const hosted = runnerBackend === "github" || runAttempt > 1;
-        expect(runner, JSON.stringify(context)).toBe(
-          hosted ? "ubuntu-24.04" : "blacksmith-8vcpu-ubuntu-2404",
-        );
         expect(parallel, JSON.stringify(context)).toBe(hosted ? 2 : 4);
       }
     }
+    expect(workflow.jobs.android["runs-on"]).toEqual(ORG_LINUX_RUNNER);
   });
 
   it("runs the Docker seed tier with the published updater and a checked main/PR smoke package", () => {
@@ -1751,9 +1751,7 @@ AFTER_CD
       dispatchId: "full-release-validation-1-1-ci",
     } as const;
     expect(evaluateWorkflowExpression("${{ " + prepare.if + " }}", releaseChild)).toBe(true);
-    expect(evaluateWorkflowExpression(job["runs-on"], releaseChild)).toBe(
-      "blacksmith-16vcpu-ubuntu-2404",
-    );
+    expect(job["runs-on"]).toEqual(ORG_LINUX_RUNNER);
     expect(evaluateWorkflowExpression(parallelism!, releaseChild)).toBe(1);
     for (const recovery of [
       { ...releaseChild, runnerBackend: "github" as const },
@@ -1761,17 +1759,9 @@ AFTER_CD
       { ...releaseChild, runnerBackend: "hybrid" as const, runAttempt: 2 },
       { ...releaseChild, runnerBackend: "runson" as const, runAttempt: 2 },
     ]) {
-      expect(evaluateWorkflowExpression(job["runs-on"], recovery)).toBe("ubuntu-24.04");
       expect(evaluateWorkflowExpression(parallelism!, recovery)).toBe(1);
     }
-    expect(
-      evaluateWorkflowExpression(job["runs-on"], {
-        ...releaseChild,
-        releaseRunnerGroup: "release-runners",
-      }),
-    ).toEqual({ group: "release-runners", labels: "ubuntu-24.04" });
     const manualDispatch = { ...releaseChild, dispatchId: "" };
-    expect(evaluateWorkflowExpression(job["runs-on"], manualDispatch)).toBe("ubuntu-24.04");
     expect(evaluateWorkflowExpression(parallelism!, manualDispatch)).toBe(1);
     const prepareRun = expectDefined(prepare.run, "Docker smoke package preparation");
     expect(prepareRun).toContain("pnpm build:ci-artifacts");
@@ -2357,184 +2347,23 @@ require("node:fs").writeFileSync("scheduler-restart", process.env.OPENCLAW_UPGRA
     expect(actionCheckoutIndex).toBeLessThan(setupIndex);
   });
 
-  it("keeps tiny hybrid controls hosted without moving security or fork first attempts", () => {
-    const context = {
-      eventName: "pull_request",
-      repository: "openclaw/openclaw",
-      runAttempt: 1,
-      runnerBackend: "hybrid",
-    } as const;
-    for (const jobName of ["preflight", "security-fast", "ci-gate"]) {
-      const runner = (overrides: Partial<Parameters<typeof evaluateWorkflowExpression>[1]>) =>
-        ciValue(jobName, "runs-on", { ...context, ...overrides });
-      for (const eventName of ["pull_request", "push"] as const) {
-        expect(runner({ eventName }), jobName).toBe(
-          jobName === "security-fast" ? "blacksmith-4vcpu-ubuntu-2404" : "ubuntu-24.04",
-        );
-      }
-      expect(
-        runner({
-          authorAssociation: "NONE",
-          headRepository: "contributor/openclaw",
-        }),
-        `${jobName}: untrusted fork first attempt`,
-      ).toBe("blacksmith-4vcpu-ubuntu-2404");
-      for (const override of [
-        { runAttempt: 0 },
-        { runAttempt: 2 },
-        { runAttempt: 2, headRepository: "contributor/openclaw" },
-        { runnerBackend: "github" },
-        { eventName: "workflow_dispatch" },
-        { repository: "contributor/openclaw" },
-      ] as const) {
-        expect(runner(override), jobName).toBe("ubuntu-24.04");
-      }
-      for (const runnerBackend of ["", "blacksmith"] as const) {
-        for (const eventName of ["pull_request", "push"] as const) {
-          expect(runner({ eventName, runnerBackend }), jobName).toBe(
-            jobName === "preflight" ? "blacksmith-4vcpu-ubuntu-2404" : "ubuntu-24.04",
-          );
-        }
-      }
-    }
-    for (const [jobName, task, expected] of [
-      ["preflight", undefined, "ubuntu-24.04"],
-      ["security-fast", undefined, "ubuntu-24.04"],
-      ["checks-ui", undefined, "blacksmith-8vcpu-ubuntu-2404"],
-      ["checks-ui-e2e", "browser-extension", "ubuntu-24.04"],
-      ["checks-ui-e2e", "control-ui", "blacksmith-16vcpu-ubuntu-2404"],
-      ["checks-ui-e2e-real-gateway", undefined, "blacksmith-16vcpu-ubuntu-2404"],
-    ] as const) {
-      expect(
-        ciValue(jobName, "runs-on", {
-          ...context,
-          matrix: { task },
-          preflightOutputs: { hybrid_hosted_offload: "true" },
-        }),
-        `${jobName}: ${task ?? "default"}`,
-      ).toBe(expected);
-    }
-    for (const frozenTarget of ["true", ""]) {
-      expect(
-        ciValue("checks-ui-e2e-real-gateway", "runs-on", {
-          ...context,
-          preflightOutputs: { frozen_target: frozenTarget },
-        }),
-      ).toBe("blacksmith-32vcpu-ubuntu-2404");
-    }
-    for (const authorAssociation of ["OWNER", "MEMBER", "COLLABORATOR", "CONTRIBUTOR"]) {
-      for (const headRepository of ["openclaw/openclaw", "contributor/openclaw"]) {
-        for (const runnerBackend of ["hybrid", "runson"] as const) {
-          expect(
-            ciValue("preflight", "runs-on", {
-              ...context,
-              authorAssociation,
-              headRepository,
-              runnerBackend,
-            }),
-            `${runnerBackend}: ${authorAssociation}: ${headRepository}`,
-          ).toBe(
-            runnerBackend === "hybrid" && headRepository === "openclaw/openclaw"
-              ? "ubuntu-24.04"
-              : "blacksmith-4vcpu-ubuntu-2404",
-          );
-        }
-      }
-    }
-  });
-
+  // Open Group: hosted-offload, Blacksmith, and dispatch runner routing was removed with the
+  // self-hosted migration, so every routing-sensitive job now uses the static org Linux runner.
   it.each([
-    {
-      file: "full-release-validation.yml",
-      runner: "blacksmith-4vcpu-ubuntu-2404",
-      job: "release_checks_independent",
-    },
-    {
-      file: "openclaw-npm-preflight.yml",
-      runner: "blacksmith-32vcpu-ubuntu-2404",
-      job: "check_openclaw_npm",
-    },
-  ])("honors the global hosted runner override for $file/$job", ({ file, runner, job }) => {
-    const workflow = readWorkflow(`.github/workflows/${file}`);
-    const runsOn = workflow.jobs[job]["runs-on"];
-    const supportsHostedInput =
-      file === "openclaw-npm-preflight.yml" || file === "openclaw-live-and-e2e-checks-reusable.yml";
-
-    for (const runnerBackend of ["github", "", "blacksmith", "hybrid"] as const) {
-      for (const useGithubHostedRunners of [false, true]) {
-        const expectedRunner =
-          runnerBackend === "github" || (supportsHostedInput && useGithubHostedRunners)
-            ? "ubuntu-24.04"
-            : runner;
-        const actualRunner =
-          typeof runsOn === "string" && runsOn.startsWith("${{")
-            ? evaluateWorkflowExpression(runsOn, {
-                eventName: "workflow_dispatch",
-                runnerBackend,
-                useGithubHostedRunners,
-              })
-            : runsOn;
-
-        expect(
-          actualRunner,
-          `${runnerBackend || "unset"}, use_github_hosted_runners=${useGithubHostedRunners}`,
-        ).toBe(expectedRunner);
-      }
-    }
+    ["ci.yml", "preflight"],
+    ["ci.yml", "security-fast"],
+    ["ci.yml", "ci-gate"],
+    ["ci.yml", "checks-ui"],
+    ["ci.yml", "checks-ui-e2e"],
+    ["ci.yml", "checks-ui-e2e-real-gateway"],
+    ["ci.yml", "check-shard"],
+    ["full-release-validation.yml", "release_checks_independent"],
+    ["openclaw-npm-preflight.yml", "check_openclaw_npm"],
+  ])("keeps %s/%s on the org Linux runner", (file, job) => {
+    expect(readWorkflow(`.github/workflows/${file}`).jobs[job]["runs-on"]).toEqual(
+      ORG_LINUX_RUNNER,
+    );
   });
-
-  it.each(["release/2026.9.1"])(
-    "honors trusted dispatch runner selection for check shards with context %j",
-    (targetContextRef) => {
-      const runsOn = readCiWorkflow().jobs["check-shard"]["runs-on"];
-      const lintMatrix = {
-        runner: "blacksmith-32vcpu-ubuntu-2404",
-        task: "lint",
-      };
-      const evaluateDispatch = (
-        runnerBackend: "blacksmith" | "github" | "hybrid",
-        overrides: Partial<Parameters<typeof evaluateWorkflowExpression>[1]> = {},
-      ) =>
-        evaluateWorkflowExpression(runsOn, {
-          eventName: "workflow_dispatch",
-          matrix: lintMatrix,
-          runnerBackend,
-          ...overrides,
-        });
-
-      expect(evaluateDispatch("blacksmith")).toBe("blacksmith-32vcpu-ubuntu-2404");
-      for (const backend of ["blacksmith", "github", "hybrid"] as const) {
-        expect(
-          evaluateDispatch(backend, backend === "blacksmith" ? { releaseGate: true } : {}),
-        ).toBe("ubuntu-24.04");
-      }
-
-      const frozenFrv = {
-        dispatchId: "full-release-validation-33128772779-ci",
-        frozenTarget: true,
-        targetContextRef,
-      };
-      expect(evaluateDispatch("hybrid", frozenFrv)).toBe("blacksmith-32vcpu-ubuntu-2404");
-      expect(evaluateDispatch("github", frozenFrv)).toBe("ubuntu-24.04");
-      for (const overrides of [
-        { frozenTarget: false },
-        { dispatchId: "manual-ci-proof" },
-        { releaseGate: true },
-        { matrix: { runner: "blacksmith-16vcpu-ubuntu-2404", task: "test-types" } },
-        { repository: "fork/openclaw" },
-      ]) {
-        expect(evaluateDispatch("hybrid", { ...frozenFrv, ...overrides })).toBe("ubuntu-24.04");
-      }
-      expect(
-        evaluateWorkflowExpression(runsOn, {
-          authorAssociation: "NONE",
-          headRepository: "openclaw/openclaw",
-          matrix: lintMatrix,
-          runnerBackend: "blacksmith",
-        }),
-      ).toBe("blacksmith-32vcpu-ubuntu-2404");
-    },
-  );
 
   it.each([
     ["current shard 1", {}, 30],
@@ -2600,7 +2429,7 @@ require("node:fs").writeFileSync("scheduler-restart", process.env.OPENCLAW_UPGRA
   });
 
   it.each(["hybrid", "runson"] as const)(
-    "keeps %s UI shards on Blacksmith with their existing timeout",
+    "keeps %s UI shards on the org runner with their existing timeout",
     (runnerBackend) => {
       for (const offload of [false, true]) {
         const context = {
@@ -2612,7 +2441,7 @@ require("node:fs").writeFileSync("scheduler-restart", process.env.OPENCLAW_UPGRA
           runnerBackend,
           preflightOutputs: { hybrid_hosted_offload: String(offload) },
         } as const;
-        expect(ciValue("checks-ui", "runs-on", context)).toBe("blacksmith-8vcpu-ubuntu-2404");
+        expect(ci.jobs["checks-ui"]["runs-on"]).toEqual(ORG_LINUX_RUNNER);
         for (const [jobName, timeout] of [
           ["build-artifacts", 20],
           ["android", 20],
@@ -5651,9 +5480,7 @@ printf '%s\n' "\${CURL_SUCCESS_IP:-203.0.113.7}"
           ? "checks-ui"
           : `checks-ui (${shard}/${scenario.shards.length})`,
       );
-      expect(evaluateWorkflowExpression(ui["runs-on"], rowContext)).toBe(
-        scenario.frozenTarget ? "ubuntu-24.04" : "blacksmith-8vcpu-ubuntu-2404",
-      );
+      expect(ui["runs-on"]).toEqual(ORG_LINUX_RUNNER);
       const env = Object.fromEntries(
         Object.entries({ ...ui.env, ...test.env }).map(([key, value]) => [
           key,
@@ -6561,7 +6388,7 @@ printf '%s\n' "\${CURL_SUCCESS_IP:-203.0.113.7}"
     const job = workflow.jobs.publish;
     expect(workflow.permissions).toEqual({});
     expect(workflow.on).toHaveProperty("workflow_dispatch");
-    expect(evaluateWorkflowRunner(job["runs-on"])).toBe("ubuntu-24.04");
+    expect(evaluateWorkflowRunner(job["runs-on"])).toEqual(ORG_LINUX_RUNNER);
     expect(job.environment).toBe("qa-live-shared");
     expect(job["timeout-minutes"]).toBe(270);
     expect(job.permissions).toEqual({

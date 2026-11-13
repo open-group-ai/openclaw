@@ -5,7 +5,6 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { parse } from "yaml";
 import { useAutoCleanupTempDirTracker } from "../helpers/temp-dir.js";
-import { evaluateWorkflowRunner } from "./ci-workflow.test-support.js";
 
 const RELEASE_CHECKS_PATH = ".github/workflows/openclaw-release-checks.yml";
 const WORKFLOW_PATH = ".github/workflows/openclaw-release-telegram-qa.yml";
@@ -395,6 +394,8 @@ function provenanceScenario(defaults: ProvenanceCase, block?: ProvenanceBlock) {
   return (overrides: ProvenanceCase = {}) => checkProvenance({ ...defaults, ...overrides }, block);
 }
 
+const LINUX_RUNNER = ["self-hosted", "Linux", "X64", "grow-ci", "open-group-super-cluster"];
+
 describe("release Telegram QA workflow", () => {
   it("keeps the workflow wiring explicit and secret-scoped", () => {
     const release = workflow(RELEASE_CHECKS_PATH);
@@ -404,7 +405,8 @@ describe("release Telegram QA workflow", () => {
       permissions: { actions: "write", contents: "read" },
       "timeout-minutes": 210,
     });
-    expect(evaluateWorkflowRunner(caller?.["runs-on"])).toBe("ubuntu-24.04");
+    // Open Group: release Linux jobs run on the self-hosted super-cluster.
+    expect(caller?.["runs-on"]).toEqual(LINUX_RUNNER);
     expect(caller?.environment).toBeUndefined();
     expect(caller?.outputs?.conclusion).toBe(
       "${{ steps.dispatch.outputs.conclusion || steps.dispatch.outcome }}",
@@ -414,7 +416,7 @@ describe("release Telegram QA workflow", () => {
     const trusted = job("trusted_identity");
     expect(trusted).toMatchObject({
       permissions: { contents: "read", "id-token": "write" },
-      "runs-on": "ubuntu-24.04",
+      "runs-on": LINUX_RUNNER,
       "timeout-minutes": 5,
     });
     expect(step("trusted_identity", "Verify dispatched workflow identity").id).toBe("identity");

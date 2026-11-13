@@ -73,7 +73,9 @@ jobs:
     needs: prepare-mermaid
     # Swift CodeQL tracing requires macOS/Xcode 26 until upstream adds macOS 27 support.
     # https://github.com/github/codeql/issues/22742
-    runs-on: [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
+    # Open Group: needs a self-hosted macOS runner (none in the fleet yet); the workflow runs only
+    # from manual dispatch here because the schedule is limited to openclaw/openclaw.
+    runs-on: [self-hosted, macOS, ARM64]
     timeout-minutes: 90
     steps:
       - name: Checkout

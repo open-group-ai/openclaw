@@ -41,17 +41,11 @@ jobs:
           - target: x86_64-unknown-linux-gnu
             runner: [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
             full: true
-          - target: aarch64-unknown-linux-gnu
-            runner: ubuntu-24.04-arm
-          - target: aarch64-apple-darwin
-            runner: xcode-27
-          - target: x86_64-pc-windows-msvc
-            runner: windows-2025
-    defaults:
+    defaults: &iroh_node_defaults
       run:
         shell: bash
         working-directory: crates/openclaw-iroh-node
-    steps:
+    steps: &iroh_node_steps
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -153,3 +147,23 @@ jobs:
           path: crates/openclaw-iroh-node/*.node
           retention-days: 7
           if-no-files-found: error
+
+  # Open Group: the fleet has no self-hosted ARM64, macOS, or Windows runner and GitHub-hosted labels
+  # are forbidden, so the cross-platform bindings build only from manual dispatch.
+  build-cross:
+    if: github.event_name == 'workflow_dispatch'
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-unknown-linux-gnu
+            runner: [self-hosted, Linux, ARM64]
+          - target: aarch64-apple-darwin
+            runner: [self-hosted, macOS, ARM64]
+          - target: x86_64-pc-windows-msvc
+            runner: [self-hosted, Windows, X64]
+    defaults: *iroh_node_defaults
+    steps: *iroh_node_steps

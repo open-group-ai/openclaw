@@ -17,9 +17,10 @@ import { afterEach, describe, expect, it } from "vitest";
 import { parse } from "yaml";
 import { useAutoCleanupTempDirTracker } from "../helpers/temp-dir.js";
 import { runCiGitStep } from "./ci-git-owner.test-support.js";
-import { evaluateWorkflowRunner } from "./ci-workflow.test-support.js";
 
 const WORKFLOW = ".github/workflows/openclaw-performance.yml";
+// Open Group: Linux jobs run on the self-hosted super-cluster.
+const LINUX_RUNNER = ["self-hosted", "Linux", "X64", "grow-ci", "open-group-super-cluster"];
 const tempDirs = useAutoCleanupTempDirTracker(afterEach);
 // Actual Ubuntu workflow bodies need POSIX paths; native Windows ownership is
 // exercised by ci-platform-checkout, while static workflow contracts run everywhere.
@@ -42,7 +43,7 @@ type WorkflowJob = {
   needs?: string | string[];
   outputs?: Record<string, string>;
   permissions?: Record<string, string>;
-  "runs-on"?: string;
+  "runs-on"?: string | string[];
   "timeout-minutes"?: number;
   steps?: WorkflowStep[];
   strategy?: {
@@ -236,7 +237,7 @@ describe("OpenClaw performance workflow", () => {
     expect(benchmark?.if).toBe(
       "${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'vitest-pair' }}",
     );
-    expect(evaluateWorkflowRunner(benchmark?.["runs-on"])).toBe("ubuntu-24.04");
+    expect(benchmark?.["runs-on"]).toEqual(LINUX_RUNNER);
     expect(benchmark?.["timeout-minutes"]).toBe(180);
     expect(benchmark?.permissions).toEqual({ contents: "read" });
     expect(JSON.stringify(benchmark)).not.toContain("secrets.");
@@ -896,7 +897,7 @@ describe("OpenClaw performance workflow", () => {
     expect(publisher?.if).toBe(
       "${{ always() && (github.event_name == 'schedule' || (inputs.mode != 'vitest-pair' && inputs.mode != 'gateway-concurrency')) && needs.resolve_target.outputs.secret_eligible == 'true' && (github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.publish_reports == true)) && needs.resolve_target.result == 'success' && needs.kova.result != 'cancelled' && needs.source_performance.result != 'cancelled' }}",
     );
-    expect(evaluateWorkflowRunner(publisher?.["runs-on"])).toBe("ubuntu-24.04");
+    expect(publisher?.["runs-on"]).toEqual(LINUX_RUNNER);
     expect(publisher?.permissions?.actions).toBe("read");
     expect(publisher?.env?.REPORT_PUBLISH_REQUIRED).toBe(
       "${{ github.event_name == 'schedule' || inputs.profile == 'release' }}",

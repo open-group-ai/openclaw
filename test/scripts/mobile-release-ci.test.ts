@@ -521,7 +521,7 @@ describe("mobile release CI tools", () => {
       env?: Record<string, string>;
       needs?: string;
       permissions: Record<string, string>;
-      "runs-on": string;
+      "runs-on": string | string[];
       steps: WorkflowStep[];
       "timeout-minutes": string | number;
     };
@@ -567,7 +567,14 @@ describe("mobile release CI tools", () => {
     expect(workflow.permissions).toEqual({ contents: "read" });
     for (const activeJob of [validationJob, job]) {
       expect(activeJob.permissions).toEqual({ contents: "read" });
-      expect(activeJob["runs-on"]).toBe("ubuntu-24.04");
+      // Open Group: Linux jobs run on the self-hosted super-cluster.
+      expect(activeJob["runs-on"]).toEqual([
+        "self-hosted",
+        "Linux",
+        "X64",
+        "grow-ci",
+        "open-group-super-cluster",
+      ]);
     }
     expect(job.needs).toBe("validate-target");
     for (const [operation, timeout] of [

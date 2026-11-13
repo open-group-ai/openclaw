@@ -663,90 +663,17 @@ describe("workflow fixture reads", () => {
 });
 
 describe("PR failure reporting", () => {
-  it("keeps critical-path routing and adds default Blacksmith failure reporting", () => {
-    const gate = readCiWorkflow().jobs["ci-gate"];
-    const context = {
-      eventName: "pull_request" as const,
-      repository: "openclaw/openclaw",
-      runAttempt: 1,
-      runnerProfile: "blacksmith" as const,
-      failureReportOutputs: { failure_job_id: "42" },
-    };
-    for (const runnerBackend of ["", "blacksmith"] as const) {
-      expect(evaluateWorkflowExpression(gate["runs-on"], { ...context, runnerBackend })).toBe(
-        "blacksmith-4vcpu-ubuntu-2404",
-      );
-    }
-    for (const override of [
-      { failureReportOutputs: {} },
-      { runAttempt: 2 },
-      { runnerProfile: "github" as const },
-      { runnerBackend: "github" as const },
-      { eventName: "push" as const },
-      { eventName: "workflow_dispatch" as const },
-      { headRepository: "contributor/openclaw" },
-    ]) {
-      expect(evaluateWorkflowExpression(gate["runs-on"], { ...context, ...override })).toBe(
-        "ubuntu-24.04",
-      );
-    }
-    for (const runnerBackend of ["hybrid", "runson"] as const) {
-      expect(
-        evaluateWorkflowExpression(gate["runs-on"], {
-          ...context,
-          runnerBackend,
-          runnerProfile: "hybrid",
-          failureReportOutputs: {},
-        }),
-      ).toBe(runnerBackend === "hybrid" ? "ubuntu-24.04" : "blacksmith-4vcpu-ubuntu-2404");
-      const report = readCiWorkflow().jobs["pr-failure-report"];
-      expect(
-        evaluateWorkflowExpression(report["runs-on"], {
-          ...context,
-          runnerBackend,
-          runnerProfile: "hybrid",
-        }),
-      ).toBe(runnerBackend === "hybrid" ? "ubuntu-24.04" : "blacksmith-4vcpu-ubuntu-2404");
-      expect(
-        evaluateWorkflowExpression(report["runs-on"], {
-          ...context,
-          runnerBackend,
-          headRepository: "contributor/openclaw",
-        }),
-      ).toBe("ubuntu-24.04");
-    }
-  });
-
-  it("keeps hybrid qualification and release runner reservations intact", () => {
+  // Open Group: hosted, Blacksmith, and release-group routing gave way to the self-hosted fleet.
+  it("keeps preflight, the gate, and failure reporting on the org Linux runner", () => {
     const workflow = readCiWorkflow();
-    for (const nodeRunnerBackend of ["hybrid", "runson"]) {
-      const context = {
-        eventName: "workflow_dispatch" as const,
-        repository: "openclaw/openclaw",
-        runAttempt: 1,
-        runnerBackend: "hybrid" as const,
-        preflightOutputs: {
-          ci_qualification: "true",
-          qualification_runner_backend: "hybrid",
-          node_runner_backend: nodeRunnerBackend,
-        },
-      };
-      expect(evaluateWorkflowExpression(workflow.jobs.preflight["runs-on"], context)).toBe(
-        "ubuntu-24.04",
-      );
-      expect(evaluateWorkflowExpression(workflow.jobs["ci-gate"]["runs-on"], context)).toBe(
-        "blacksmith-4vcpu-ubuntu-2404",
-      );
-      for (const jobName of ["preflight", "ci-gate"]) {
-        expect(
-          evaluateWorkflowExpression(workflow.jobs[jobName]["runs-on"], {
-            ...context,
-            preflightOutputs: {},
-            dispatchId: "full-release-validation-123-1",
-            releaseRunnerGroup: "Release reserved",
-          }),
-        ).toEqual({ group: "Release reserved", labels: "ubuntu-24.04" });
-      }
+    for (const jobName of ["preflight", "ci-gate", "pr-failure-report"]) {
+      expect(workflow.jobs[jobName]["runs-on"], jobName).toEqual([
+        "self-hosted",
+        "Linux",
+        "X64",
+        "grow-ci",
+        "open-group-super-cluster",
+      ]);
     }
   });
 

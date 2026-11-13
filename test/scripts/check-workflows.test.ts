@@ -29,7 +29,7 @@ type WorkflowJob = {
   needs?: string | string[];
   permissions?: Record<string, string>;
   env?: Record<string, string>;
-  "runs-on": string;
+  "runs-on": string | string[];
   "timeout-minutes"?: number;
   "continue-on-error"?: boolean | string;
   steps: WorkflowStep[];
@@ -272,7 +272,8 @@ describe("check-workflows", () => {
     expect(native.if).toBe(
       "${{ inputs.run_windows_ci && inputs.installed_startup_package == '' && !inputs.run_private_node_provisioning && !inputs.installed_repair_worker && inputs.windows_ci_replay == '' }}",
     );
-    expect(native["runs-on"]).toBe("windows-2025");
+    // Open Group: native Windows proof uses the self-hosted Windows label, not Linux or hosted.
+    expect(native["runs-on"]).toEqual(["self-hosted", "Windows", "X64"]);
     expect(probe.if).toBeUndefined();
     expect(probe["runs-on"]).toBe("${{ inputs.runner_label }}");
     for (const job of [probe, native]) {
@@ -437,7 +438,7 @@ describe("check-workflows", () => {
     const installed = workflow.jobs["native-schtasks-package"]!;
     expect(installed.needs).toBe("probe");
     expect(installed.permissions).toEqual({ contents: "read" });
-    expect(installed["runs-on"]).toBe("windows-2025");
+    expect(installed["runs-on"]).toEqual(["self-hosted", "Windows", "X64"]);
     expect(installed.steps).toBe(native.steps);
     expect(installed.if).toContain("inputs.installed_startup_package != ''");
     expect(native.if).toContain("inputs.installed_startup_package == ''");

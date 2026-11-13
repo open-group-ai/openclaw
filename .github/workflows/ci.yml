@@ -234,17 +234,20 @@ jobs:
       ui_real_gateway_matrix: ${{ steps.manifest.outputs.ui_real_gateway_matrix }}
       run_native_i18n: ${{ steps.manifest.outputs.run_native_i18n }}
       strict_native_i18n: ${{ github.event_name == 'workflow_dispatch' && !inputs.release_gate && 'true' || steps.changed_scope.outputs.strict_native_i18n }}
-      run_checks_windows: ${{ steps.manifest.outputs.run_checks_windows }}
+      # Open Group: the fleet has no self-hosted Windows or macOS runner and GitHub-hosted labels are
+      # forbidden, so automatic runs never select the Windows, macOS, or iOS lanes. Manual dispatches
+      # keep them; they queue until a matching self-hosted runner joins the fleet.
+      run_checks_windows: ${{ github.event_name == 'workflow_dispatch' && steps.manifest.outputs.run_checks_windows || 'false' }}
       checks_windows_matrix: ${{ steps.manifest.outputs.checks_windows_matrix }}
-      run_macos_node: ${{ steps.manifest.outputs.run_macos_node }}
+      run_macos_node: ${{ github.event_name == 'workflow_dispatch' && steps.manifest.outputs.run_macos_node || 'false' }}
       macos_node_matrix: ${{ steps.manifest.outputs.macos_node_matrix }}
-      run_macos_swift: ${{ steps.manifest.outputs.run_macos_swift }}
+      run_macos_swift: ${{ github.event_name == 'workflow_dispatch' && steps.manifest.outputs.run_macos_swift || 'false' }}
       run_openclawkit_tests: ${{ steps.manifest.outputs.run_openclawkit_tests }}
-      run_ios_build: ${{ steps.manifest.outputs.run_ios_build }}
+      run_ios_build: ${{ github.event_name == 'workflow_dispatch' && steps.manifest.outputs.run_ios_build || 'false' }}
       run_ios_voice_cleanup_tests: ${{ steps.manifest.outputs.run_ios_voice_cleanup_tests }}
       run_ios_lifecycle_tests: ${{ steps.manifest.outputs.run_ios_lifecycle_tests }}
       ios_simulator_selection: ${{ steps.manifest.outputs.ios_simulator_selection }}
-      run_ios_screenshots: ${{ steps.changed_scope.outputs.run_ios_screenshots }}
+      run_ios_screenshots: ${{ github.event_name == 'workflow_dispatch' && steps.changed_scope.outputs.run_ios_screenshots || 'false' }}
       run_android_screenshots: ${{ steps.manifest.outputs.run_android_screenshots }}
       run_android_job: ${{ steps.manifest.outputs.run_android_job }}
       run_android_access_native: ${{ steps.manifest.outputs.run_android_access_native }}
@@ -4833,7 +4836,8 @@ jobs:
     name: ${{ matrix.check_name || 'checks-windows' }}
     needs: [preflight]
     if: needs.preflight.outputs.run_checks_windows == 'true'
-    runs-on: ${{ (github.event_name == 'workflow_dispatch' && startsWith(inputs.dispatch_id, 'full-release-validation-') && vars.OPENCLAW_RELEASE_RUNNER_GROUP || '') != '' && fromJSON(format('{{"group":{0},"labels":{1}}}', toJSON((github.event_name == 'workflow_dispatch' && startsWith(inputs.dispatch_id, 'full-release-validation-') && vars.OPENCLAW_RELEASE_RUNNER_GROUP || '')), toJSON((needs.preflight.outputs.ci_qualification == 'true' && (github.run_attempt == 1 && needs.preflight.outputs.qualification_runner_backend || 'github') || vars.OPENCLAW_CI_RUNNER_BACKEND) == 'github' && 'windows-2025' || (contains(fromJSON('["hybrid","runson"]'), (needs.preflight.outputs.ci_qualification == 'true' && (github.run_attempt == 1 && needs.preflight.outputs.qualification_runner_backend || 'github') || vars.OPENCLAW_CI_RUNNER_BACKEND)) && github.run_attempt > 1) && 'windows-2025' || ((github.event_name == 'workflow_dispatch' && ((needs.preflight.outputs.node_runner_backend != 'runson' && needs.preflight.outputs.ci_qualification != 'true') || github.run_attempt != 1)) || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && github.run_attempt > 1)) && 'windows-2025' || (github.repository == 'openclaw/openclaw' && 'blacksmith-16vcpu-windows-2025' || 'windows-2025')))) || ((needs.preflight.outputs.ci_qualification == 'true' && (github.run_attempt == 1 && needs.preflight.outputs.qualification_runner_backend || 'github') || vars.OPENCLAW_CI_RUNNER_BACKEND) == 'github' && 'windows-2025' || (contains(fromJSON('["hybrid","runson"]'), (needs.preflight.outputs.ci_qualification == 'true' && (github.run_attempt == 1 && needs.preflight.outputs.qualification_runner_backend || 'github') || vars.OPENCLAW_CI_RUNNER_BACKEND)) && github.run_attempt > 1) && 'windows-2025' || ((github.event_name == 'workflow_dispatch' && ((needs.preflight.outputs.node_runner_backend != 'runson' && needs.preflight.outputs.ci_qualification != 'true') || github.run_attempt != 1)) || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && github.run_attempt > 1)) && 'windows-2025' || (github.repository == 'openclaw/openclaw' && 'blacksmith-16vcpu-windows-2025' || 'windows-2025')) }}
+    # Open Group: Windows lane; gated to manual dispatch by preflight run_checks_windows.
+    runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 60
     env:
       # Node 24.20 fixes Windows scheduler shutdown (nodejs/node#61999).
@@ -4972,12 +4976,8 @@ jobs:
     name: ${{ matrix.check_name || 'macos-node' }}
     needs: [preflight]
     if: ${{ !cancelled() && always() && needs.preflight.outputs.run_macos_node == 'true' }}
-    runs-on: &hosted_xcode_runner >-
-      ${{ (github.event_name == 'workflow_dispatch' && startsWith(inputs.dispatch_id,
-      'full-release-validation-') && vars.OPENCLAW_RELEASE_RUNNER_GROUP || '') != '' &&
-      fromJSON(format('{{"group":{0},"labels":{1}}}', toJSON((github.event_name == 'workflow_dispatch' &&
-      startsWith(inputs.dispatch_id, 'full-release-validation-') && vars.OPENCLAW_RELEASE_RUNNER_GROUP ||
-      '')), toJSON('xcode-27'))) || ('xcode-27') }}
+    # Open Group: macOS lanes; gated to manual dispatch by preflight run_macos_* / run_ios_*.
+    runs-on: &macos_runner [self-hosted, macOS, ARM64]
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -5022,7 +5022,7 @@ jobs:
       max-parallel: 2
       matrix:
         phase: ${{ fromJSON(github.event_name == 'workflow_dispatch' && needs.preflight.outputs.validation_tier != 'main' && !inputs.release_gate && needs.preflight.outputs.release_scope == 'full' && '["release","tests"]' || '["tests"]') }}
-    runs-on: *hosted_xcode_runner
+    runs-on: *macos_runner
     timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && needs.preflight.outputs.validation_tier != 'main' && !inputs.release_gate && needs.preflight.outputs.release_scope == 'full' && needs.preflight.outputs.compatibility_target != 'true' && matrix.phase == 'tests' && 75 || 30 }}
     env:
       NATIVE_RUNTIME_ARTIFACT_ID: ${{ needs.build-artifacts.outputs.native_runtime_artifact_id }}
@@ -5537,7 +5537,7 @@ jobs:
       max-parallel: 2
       matrix:
         phase: [packages]
-    runs-on: *hosted_xcode_runner
+    runs-on: *macos_runner
     timeout-minutes: 30
     env:
       HISTORICAL_TARGET: *historical_target
@@ -5559,7 +5559,7 @@ jobs:
       max-parallel: 2
       matrix:
         phase: ${{ fromJSON(github.event_name == 'schedule' && '["tests"]' || github.event_name == 'workflow_dispatch' && !inputs.release_gate && needs.preflight.outputs.release_scope == 'full' && ((needs.preflight.outputs.validation_tier == 'main' || needs.preflight.outputs.compatibility_target == 'true') && '["tests"]' || '["release","tests"]') || '["smoke"]') }}
-    runs-on: *hosted_xcode_runner
+    runs-on: *macos_runner
     timeout-minutes: 150
     env:
       HISTORICAL_TARGET: *historical_target
@@ -6086,7 +6086,7 @@ jobs:
     name: "ios-screenshots"
     needs: [preflight]
     if: &ios_screenshot_capture_gate ${{ needs.preflight.outputs.validation_tier != 'main' && needs.preflight.outputs.release_scope == 'full' && needs.preflight.outputs.compatibility_target != 'true' && ((github.event_name == 'workflow_dispatch' && !inputs.release_gate) || needs.preflight.outputs.run_ios_screenshots == 'true') }}
-    runs-on: ${{ (github.event_name == 'workflow_dispatch' && startsWith(inputs.dispatch_id, 'full-release-validation-') && vars.OPENCLAW_RELEASE_RUNNER_GROUP || '') != '' && fromJSON(format('{{"group":{0},"labels":{1}}}', toJSON((github.event_name == 'workflow_dispatch' && startsWith(inputs.dispatch_id, 'full-release-validation-') && vars.OPENCLAW_RELEASE_RUNNER_GROUP || '')), toJSON('xcode-27-xlarge'))) || ('xcode-27-xlarge') }}
+    runs-on: *macos_runner
     timeout-minutes: 90
     env:
       HISTORICAL_TARGET: *historical_target

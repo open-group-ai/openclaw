@@ -926,7 +926,9 @@ jobs:
   native-schtasks:
     name: Native Scheduled Task proof
     if: ${{ inputs.run_windows_ci && inputs.installed_startup_package == '' && !inputs.run_private_node_provisioning && !inputs.installed_repair_worker && inputs.windows_ci_replay == '' }}
-    runs-on: [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
+    # Open Group: manual-dispatch-only native Windows proof; it queues until a self-hosted Windows
+    # runner joins the fleet (GitHub-hosted labels are forbidden).
+    runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 75
     env:
       NATIVE_PACKAGE_ID: ""
@@ -1573,7 +1575,7 @@ jobs:
     needs: probe
     permissions:
       contents: read
-    runs-on: [self-hosted, Linux, X64, grow-ci, open-group-super-cluster]
+    runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 75
     env:
       NATIVE_PACKAGE_ID: ${{ needs.probe.outputs.native_package_id }}

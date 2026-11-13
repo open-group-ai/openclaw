@@ -56,7 +56,7 @@ type WorkflowJob = {
   outputs?: Record<string, unknown>;
   permissions?: Record<string, unknown>;
   "continue-on-error"?: boolean;
-  "runs-on"?: string;
+  "runs-on"?: string | string[];
   steps?: WorkflowStep[];
   "timeout-minutes"?: number | string;
   uses?: string;
@@ -712,9 +712,15 @@ OPENCLAW_BUN_GLOBAL_SMOKE_DIST_IMAGE
     "inputs.run_bun_only_runtime_smoke && !inputs.allow_frozen_target_scenario_omissions",
   );
   expect(bunOnlyConsumer["continue-on-error"]).toBe(true);
-  expect(bunOnlyConsumer["runs-on"]).toBe(bunConsumer["runs-on"]);
-  assertText(bunOnlyConsumer["runs-on"]).contains(`inputs.runner_group
-ubuntu-24.04`);
+  expect(bunOnlyConsumer["runs-on"]).toEqual(bunConsumer["runs-on"]);
+  // Open Group: Linux jobs run on the self-hosted super-cluster, not a hosted runner group.
+  expect(bunOnlyConsumer["runs-on"]).toEqual([
+    "self-hosted",
+    "Linux",
+    "X64",
+    "grow-ci",
+    "open-group-super-cluster",
+  ]);
   expect(bunOnlyConsumer["timeout-minutes"]).toBe(20);
   const bunOnlyNode = step(bunOnlyConsumer, "Setup Node for payload verification");
   expect(bunOnlyNode).toMatchObject({

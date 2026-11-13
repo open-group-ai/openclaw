@@ -15,7 +15,9 @@ const config = parse(workflow) as {
 const scopedJobs = Object.keys(config.jobs).filter(
   (job) => !["scope", "sync-website"].includes(job),
 );
-const unixJobs = scopedJobs.filter((job) => !["static", "windows-installer"].includes(job));
+// Open Group has no self-hosted macOS or Windows runner; those lanes run only from manual dispatch.
+const dispatchOnlyJobs = ["macos-installer", "windows-installer"];
+const unixJobs = scopedJobs.filter((job) => !["static", ...dispatchOnlyJobs].includes(job));
 function stepRun(job: string, name: string) {
   const run = config.jobs[job]?.steps.find((step) => step.name === name)?.run;
   if (!run) {
@@ -164,11 +166,16 @@ describe("installer platform admission", () => {
       { env: { INSTALLER_CHECKOUT_OUTCOME: options.checkout ?? "success" } },
     );
     const needs = { scope: { result: "success", outputs } };
-    const evaluate = (guard: string, cancelled = false) =>
+    const evaluate = (
+      guard: string,
+      cancelled = false,
+      eventName = options.event ?? "pull_request",
+    ) =>
       compileFunction(`return (${guard.replace(/^\$\{\{\s*|\s*\}\}$/gu, "")});`, [
         "needs",
         "cancelled",
-      ])(needs, () => cancelled) as boolean;
+        "github",
+      ])(needs, () => cancelled, { event_name: eventName }) as boolean;
     const jobs = Object.fromEntries(
       scopedJobs.map((job) => [job, evaluate(config.jobs[job]!.if!)]),
     );
@@ -226,7 +233,12 @@ describe("installer platform admission", () => {
     for (const job of unixJobs) {
       expect(result.jobs[job], job).toBe(scenario.unix);
     }
-    expect(result.jobs["windows-installer"]).toBe(scenario.windows);
+    expect(result.jobs["macos-installer"]).toBe(false);
+    expect(result.jobs["windows-installer"]).toBe(false);
+    const dispatched = (job: string) =>
+      result.evaluate(config.jobs[job]!.if!, false, "workflow_dispatch");
+    expect(dispatched("macos-installer")).toBe(scenario.unix);
+    expect(dispatched("windows-installer")).toBe(scenario.windows);
     expect(result.staticSteps["Shell syntax"]).toBe(scenario.unix);
     expect(result.staticSteps["PowerShell syntax"]).toBe(scenario.windows);
     expect(result.jobs.static).toBe(true);
@@ -243,7 +255,9 @@ describe("installer platform admission", () => {
       expect(result.diffCalls).toBe(0);
     }
     expect(result.outputs).toEqual({ unix: "true", windows: "true" });
-    expect(Object.values(result.jobs).every(Boolean)).toBe(true);
+    for (const [job, admitted] of Object.entries(result.jobs)) {
+      expect(admitted, job).toBe(!dispatchOnlyJobs.includes(job));
+    }
     expect(Object.values(result.staticSteps).every(Boolean)).toBe(true);
   });
 });

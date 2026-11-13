@@ -40,7 +40,7 @@ it("pins candidate, tooling and qualification inputs through the SHA-pinned help
   expect(text).not.toMatch(/--ref\s+main|ref:\s*["']?main["']?\s*$/mu);
   expect(Object.keys(nightly.jobs)).toEqual(["validate"]);
   expect(job.permissions).toEqual({ actions: "write", contents: "write" });
-  expect(job["runs-on"]).toBe(frv.jobs.release_decision["runs-on"]);
+  expect(job["runs-on"]).toEqual(frv.jobs.release_decision["runs-on"]);
   expect(job["timeout-minutes"]).toBe(waitMinutes);
   expect(frv.jobs.release_decision["timeout-minutes"]).toBe(waitMinutes);
   expect(steps[0]).toMatchObject({

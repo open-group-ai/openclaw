@@ -71,6 +71,22 @@ const WORKFLOWS: WorkflowPolicy[] = [
     convertToDraft: cancel ? (true as const) : undefined,
   })),
 ];
+// Open Group has no self-hosted ARM64, macOS, or Windows runner; these jobs run only from
+// manual dispatch.
+const DISPATCH_ONLY_JOBS: Record<string, readonly string[]> = {
+  [workflowPath("ci-check-arm-testbox")]: ["check-arm"],
+  [workflowPath("macos-periphery")]: [
+    "macos-index",
+    "scan",
+    "scan-macos",
+    "ios-index",
+    "scan-ios",
+    "scan-ios-shared",
+    "intersect",
+  ],
+  [workflowPath("linux-app")]: ["test-macos", "test-windows-power"],
+  [workflowPath("website-installer-sync")]: ["macos-installer", "windows-installer"],
+};
 
 type Job = {
   uses?: string;
@@ -326,7 +342,7 @@ async function eligibleJobs(workflow: Workflow, github: Github, vars: Record<str
       }
     }
     needs.scope = {
-      outputs: evaluateRecord(scope.outputs ?? {}, { steps }),
+      outputs: evaluateRecord(scope.outputs ?? {}, { github, steps }),
       result: jobs.scope ? "success" : "skipped",
     };
   }
@@ -401,6 +417,10 @@ it.each([
 describe.each(WORKFLOWS)("ancillary admission: $file", (policy) => {
   const { file, prGroup, manual, push, convertToDraft } = policy;
   const workflow = readWorkflow(file);
+  const dispatchOnly = DISPATCH_ONLY_JOBS[file] ?? [];
+  const pullRequestJobs = Object.keys(workflow.jobs).filter(
+    (id) => id !== "scope" && id !== policy.manualAdmission && !dispatchOnly.includes(id),
+  );
 
   it("admits useful and intentional draft changes together while isolating passive drafts and other PRs", async () => {
     const ready = await admission(workflow, pr(workflow, 100, "ready_for_review"));
@@ -409,12 +429,14 @@ describe.each(WORKFLOWS)("ancillary admission: $file", (policy) => {
     expectPolicies([ready, newer], prGroup, true);
     expect(other.cancel).toBe(true);
     expect(other.group).not.toBe(prGroup);
-    expectUseful(ready, newer, other);
+    if (pullRequestJobs.length) {
+      expectUseful(ready, newer, other);
+    }
     if (file === workflowPath("website-installer-sync")) {
       expect(ready.eligibility.diffCalls).toBe(2);
     }
     for (const [id, eligible] of nonScopeJobs(ready)) {
-      expect(eligible, id).toBe(id !== policy.manualAdmission);
+      expect(eligible, id).toBe(pullRequestJobs.includes(id));
     }
     const passiveGroups: string[] = [];
     for (const [index, action] of [
